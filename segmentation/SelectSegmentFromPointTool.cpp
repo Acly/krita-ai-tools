@@ -11,6 +11,7 @@
 #include "kis_command_utils.h"
 #include "kis_paint_device.h"
 #include "kis_pixel_selection.h"
+#include "kis_selection_filters.h"
 #include "kis_selection_tool_helper.h"
 #include <kis_image_animation_interface.h>
 
@@ -52,6 +53,24 @@ void selectSegment(KisPaintDevice const &paintDevice,
     }
 }
 
+void adjustSelection(KisPixelSelectionSP const &selection, int grow, int feather, bool antiAlias)
+{
+    if (grow > 0) {
+        KisGrowSelectionFilter biggy(grow, grow);
+        biggy.process(selection, selection->selectedRect().adjusted(-grow, -grow, grow, grow));
+    } else if (grow < 0) {
+        KisShrinkSelectionFilter tiny(-grow, -grow, false);
+        tiny.process(selection, selection->selectedRect());
+    }
+    if (feather > 0) {
+        KisFeatherSelectionFilter feathery(feather);
+        feathery.process(selection, selection->selectedRect().adjusted(-feather, -feather, feather, feather));
+    } else if (antiAlias) {
+        KisAntiAliasSelectionFilter antiAliasFilter;
+        antiAliasFilter.process(selection, selection->selectedRect());
+    }
+}
+
 } // namespace
 
 SelectSegmentFromPointTool::SelectSegmentFromPointTool(KoCanvasBase *canvas)
@@ -84,17 +103,13 @@ void SelectSegmentFromPointTool::beginPrimaryAction(KoPointerEvent *event)
     }
 
     KisPaintDeviceSP dev;
-
     if (!currentNode() || !(dev = currentNode()->projection()) || !selectionEditable()) {
         event->ignore();
         return;
     }
 
     beginSelectInteraction();
-
     QApplication::setOverrideCursor(KisCursor::waitCursor());
-
-    // -------------------------------
 
     KisProcessingApplicator applicator(currentImage(),
                                        currentNode(),
@@ -126,16 +141,15 @@ void SelectSegmentFromPointTool::beginPrimaryAction(KoPointerEvent *event)
                                              colorLabelsSelected(),
                                              KisMergeLabeledLayersCommand::GroupSelectionPolicy_SelectIfColorLabeled);
         applicator.applyCommand(command, KisStrokeJobData::SEQUENTIAL, KisStrokeJobData::EXCLUSIVE);
-
     } else { // Sample Current Layer
         sourceDevice = dev;
     }
 
     KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(dev));
 
-    // bool antiAlias = antiAliasSelection();
-    // int grow = growSelection();
-    // int feather = featherSelection();
+    int grow = growSelection();
+    int feather = featherSelection();
+    bool antiAlias = antiAliasSelection();
 
     KisCanvas2 *kisCanvas = dynamic_cast<KisCanvas2 *>(canvas());
     KIS_SAFE_ASSERT_RECOVER(kisCanvas)
@@ -145,14 +159,10 @@ void SelectSegmentFromPointTool::beginPrimaryAction(KoPointerEvent *event)
         return;
     };
 
-    // KisPixelSelectionSP existingSelection;
-    // if (kisCanvas->imageView() && kisCanvas->imageView()->selection()) {
-    //     existingSelection = kisCanvas->imageView()->selection()->pixelSelection();
-    // }
-
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
-        [selection, pos, sourceDevice, env = m_dlimgEnv]() mutable -> KUndo2Command * {
+        [selection, pos, sourceDevice, grow, feather, antiAlias, env = m_dlimgEnv]() mutable -> KUndo2Command * {
             selectSegment(*sourceDevice, pos, *selection, *env);
+            adjustSelection(selection, grow, feather, antiAlias);
             return nullptr;
         });
     applicator.applyCommand(cmd, KisStrokeJobData::BARRIER);
