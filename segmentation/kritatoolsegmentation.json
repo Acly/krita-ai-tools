@@ -1,0 +1,9 @@
+{
+    "Id": "Segmentation Tools",
+    "Type": "Service",
+    "X-KDE-Library": "kritatoolsegmentation",
+    "X-KDE-ServiceTypes": [
+        "Krita/Tool"
+    ],
+    "X-Krita-Version": "28"
+}
