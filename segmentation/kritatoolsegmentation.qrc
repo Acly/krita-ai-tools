@@ -1,0 +1,15 @@
+<!--
+  SPDX-FileCopyrightText: none
+  SPDX-License-Identifier: CC0-1.0
+-->
+<RCC>
+    <qresource prefix="/">
+        <file alias="tool_segmentation_point_cursor.png">icons/tool_segmentation_point_cursor.png</file>
+        <file alias="tool_segmentation_point_cursor_add.png">icons/tool_segmentation_point_cursor_add.png</file>
+        <file alias="tool_segmentation_point_cursor_sub.png">icons/tool_segmentation_point_cursor_sub.png</file>
+        <file alias="tool_segmentation_point_cursor_inter.png">icons/tool_segmentation_point_cursor_inter.png</file>
+        <file alias="tool_segmentation_point_cursor_symdiff.png">icons/tool_segmentation_point_cursor_symdiff.png</file>
+        <file alias="light_tool_segmentation.svg">icons/light_tool_segmentation.svg</file>
+        <file alias="dark_tool_segmentation.svg">icons/dark_tool_segmentation.svg</file>
+    </qresource>
+</RCC>

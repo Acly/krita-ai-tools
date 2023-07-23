@@ -10,7 +10,7 @@ set(kritatoolsegmentation_SOURCES
     ../../tools/selectiontools/kis_selection_modifier_mapper.cc
 )
 
-# qt5_add_resources(kritaselectiontools_SOURCES tool_segmentation.qrc)
+qt5_add_resources(kritatoolsegmentation_SOURCES kritatoolsegmentation.qrc)
 
 kis_add_library(kritatoolsegmentation MODULE ${kritatoolsegmentation_SOURCES})
 

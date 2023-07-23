@@ -60,7 +60,7 @@ public:
     {
         setToolTip(i18n("Segment Selection Tool"));
         setSection(ToolBoxSection::Select);
-        setIconName(koIconNameCStr("tool_contiguous_selection"));
+        setIconName(koIconNameCStr("tool_segmentation"));
         setPriority(9);
         setActivationShapeId(KRITA_TOOL_ACTIVATION_ID);
     }
