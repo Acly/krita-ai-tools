@@ -21,7 +21,7 @@ target_link_libraries(kritatoolsegmentation PRIVATE kritaui kritabasicflakes kri
 
 install(TARGETS kritatoolsegmentation DESTINATION ${KRITA_PLUGIN_INSTALL_DIR})
 
-install( FILES
-        ToolSegmentation.action
-    DESTINATION  ${DATA_INSTALL_DIR}/krita/actions
+install(FILES
+    SelectSegmentFromPointTool.action
+    DESTINATION ${DATA_INSTALL_DIR}/krita/actions
 )
