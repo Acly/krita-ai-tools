@@ -1,5 +1,6 @@
 #include "SegmentationToolPlugin.h"
 #include "SelectSegmentFromPointTool.h"
+#include "SelectSegmentFromRectTool.h"
 
 #include <klocalizedstring.h>
 
@@ -18,6 +19,7 @@ SegmentationToolPlugin::SegmentationToolPlugin(QObject *parent, const QVariantLi
     : QObject(parent)
 {
     KoToolRegistry::instance()->add(new SelectSegmentFromPointToolFactory());
+    KoToolRegistry::instance()->add(new SelectSegmentFromRectToolFactory());
 }
 
 SegmentationToolPlugin::~SegmentationToolPlugin()

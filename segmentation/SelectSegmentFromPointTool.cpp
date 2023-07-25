@@ -11,67 +11,10 @@
 #include "kis_command_utils.h"
 #include "kis_paint_device.h"
 #include "kis_pixel_selection.h"
-#include "kis_selection_filters.h"
 #include "kis_selection_tool_helper.h"
 #include <kis_image_animation_interface.h>
 
-#include "DLImgEditLibrary.h"
-
-namespace
-{
-
-void selectSegment(KisPaintDevice const &paintDevice,
-                   QPoint const &pos,
-                   KisPixelSelection &selection,
-                   dlimgedit::Environment const &env)
-{
-    QRect bounds = paintDevice.defaultBounds()->bounds();
-    QImage image = paintDevice.convertToQImage(nullptr, bounds);
-    dlimgedit::Channels channels = dlimgedit::Channels::rgba;
-    switch (image.format()) {
-    case QImage::Format_RGBA8888:
-        // case QImage::Format_ARGB32:
-        channels = dlimgedit::Channels::rgba;
-        break;
-    case QImage::Format_RGB888:
-        channels = dlimgedit::Channels::rgb;
-        break;
-    default:
-        qDebug() << "[krita-ai-tools] Converting from" << image.format() << " to RGBA8888";
-        image = image.convertToFormat(QImage::Format_RGBA8888);
-        break;
-    }
-    try {
-        auto view = dlimgedit::ImageView(image.bits(), {image.width(), image.height()}, channels);
-        auto seg = dlimgedit::Segmentation::process(view, env);
-        auto mask = seg.get_mask(dlimgedit::Point{pos.x(), pos.y()});
-
-        selection.writeBytes(mask.pixels(), QRect(0, 0, image.width(), image.height()));
-        selection.invalidateOutlineCache();
-    } catch (const std::exception &e) {
-        qWarning() << "[krita-ai-tools] Error during segmentation:" << e.what();
-    }
-}
-
-void adjustSelection(KisPixelSelectionSP const &selection, int grow, int feather, bool antiAlias)
-{
-    if (grow > 0) {
-        KisGrowSelectionFilter biggy(grow, grow);
-        biggy.process(selection, selection->selectedRect().adjusted(-grow, -grow, grow, grow));
-    } else if (grow < 0) {
-        KisShrinkSelectionFilter tiny(-grow, -grow, false);
-        tiny.process(selection, selection->selectedRect());
-    }
-    if (feather > 0) {
-        KisFeatherSelectionFilter feathery(feather);
-        feathery.process(selection, selection->selectedRect().adjusted(-feather, -feather, feather, feather));
-    } else if (antiAlias) {
-        KisAntiAliasSelectionFilter antiAliasFilter;
-        antiAliasFilter.process(selection, selection->selectedRect());
-    }
-}
-
-} // namespace
+#include "SegmentationToolCommon.h"
 
 SelectSegmentFromPointTool::SelectSegmentFromPointTool(KoCanvasBase *canvas)
     : KisToolSelect(canvas,
@@ -79,7 +22,7 @@ SelectSegmentFromPointTool::SelectSegmentFromPointTool(KoCanvasBase *canvas)
                     i18n("Segment Selection from Point"))
 {
     setObjectName("tool_select_segment_from_point");
-    m_dlimgEnv = initDLImgEditLibrary();
+    m_dlimgEnv = SegmentationToolCommon::initLibrary();
 }
 
 SelectSegmentFromPointTool::~SelectSegmentFromPointTool()
@@ -101,68 +44,57 @@ void SelectSegmentFromPointTool::beginPrimaryAction(KoPointerEvent *event)
     if (!m_dlimgEnv) {
         return;
     }
-
-    KisPaintDeviceSP dev;
-    if (!currentNode() || !(dev = currentNode()->projection()) || !selectionEditable()) {
-        event->ignore();
+    KisCanvas2 *kisCanvas = dynamic_cast<KisCanvas2 *>(canvas());
+    if (!kisCanvas) {
+        return;
+    }
+    KisPaintDeviceSP layerImage;
+    if (!currentNode() || !(layerImage = currentNode()->projection()) || !selectionEditable()) {
         return;
     }
 
     beginSelectInteraction();
     QApplication::setOverrideCursor(KisCursor::waitCursor());
 
+    QPoint pos = convertToImagePixelCoordFloored(event);
+
     KisProcessingApplicator applicator(currentImage(),
                                        currentNode(),
                                        KisProcessingApplicator::NONE,
                                        KisImageSignalVector(),
                                        kundo2_i18n("Select Segment from Point"));
-
-    QPoint pos = convertToImagePixelCoordFloored(event);
-    // QRect rc = currentImage()->bounds();
-
-    KisImageSP image = currentImage();
-    KisPaintDeviceSP sourceDevice;
-    if (sampleLayersMode() == SampleAllLayers) {
-        sourceDevice = image->projection();
-    } else if (sampleLayersMode() == SampleColorLabeledLayers) {
-        KisImageSP refImage =
-            KisMergeLabeledLayersCommand::createRefImage(image, "Segmentation Selection Tool Reference Image");
-        refImage->animationInterface()->switchCurrentTimeAsync(image->animationInterface()->currentTime());
-        refImage->waitForDone();
-
-        sourceDevice = KisMergeLabeledLayersCommand::createRefPaintDevice(
-            image,
-            "Segmentation Selection Tool Reference Result Paint Device");
-
-        KisMergeLabeledLayersCommand *command =
-            new KisMergeLabeledLayersCommand(refImage,
-                                             sourceDevice,
-                                             image->root(),
-                                             colorLabelsSelected(),
-                                             KisMergeLabeledLayersCommand::GroupSelectionPolicy_SelectIfColorLabeled);
-        applicator.applyCommand(command, KisStrokeJobData::SEQUENTIAL, KisStrokeJobData::EXCLUSIVE);
-    } else { // Sample Current Layer
-        sourceDevice = dev;
+    KisPaintDeviceSP inputImage;
+    switch (sampleLayersMode()) {
+    case SampleAllLayers:
+        inputImage = currentImage()->projection();
+        break;
+    case SampleCurrentLayer:
+        inputImage = layerImage;
+        break;
+    case SampleColorLabeledLayers:
+        inputImage = SegmentationToolCommon::mergeColorLayers(currentImage(), colorLabelsSelected(), applicator);
+        break;
     }
 
-    KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(dev));
+    KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(layerImage));
 
-    int grow = growSelection();
-    int feather = featherSelection();
-    bool antiAlias = antiAliasSelection();
-
-    KisCanvas2 *kisCanvas = dynamic_cast<KisCanvas2 *>(canvas());
-    KIS_SAFE_ASSERT_RECOVER(kisCanvas)
-    {
-        applicator.cancel();
-        QApplication::restoreOverrideCursor();
-        return;
-    };
+    const int grow = growSelection();
+    const int feather = featherSelection();
+    const bool antiAlias = antiAliasSelection();
 
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
-        [selection, pos, sourceDevice, grow, feather, antiAlias, env = m_dlimgEnv]() mutable -> KUndo2Command * {
-            selectSegment(*sourceDevice, pos, *selection, *env);
-            adjustSelection(selection, grow, feather, antiAlias);
+        [selection, pos, inputImage, grow, feather, antiAlias, env = m_dlimgEnv]() mutable -> KUndo2Command * {
+            try {
+                auto image = SegmentationToolCommon::prepareImage(*inputImage);
+                auto seg = dlimgedit::Segmentation::process(image.view, *env);
+                auto mask = seg.get_mask(SegmentationToolCommon::toPoint(pos));
+
+                selection->writeBytes(mask.pixels(), image.rect());
+                SegmentationToolCommon::adjustSelection(selection, grow, feather, antiAlias);
+                selection->invalidateOutlineCache();
+            } catch (const std::exception &e) {
+                qWarning() << "[krita-ai-tools] Error during segmentation:" << e.what();
+            }
             return nullptr;
         });
     applicator.applyCommand(cmd, KisStrokeJobData::BARRIER);

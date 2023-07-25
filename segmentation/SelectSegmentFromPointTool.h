@@ -60,13 +60,9 @@ public:
     {
         setToolTip(i18n("Segment Selection Tool"));
         setSection(ToolBoxSection::Select);
-        setIconName(koIconNameCStr("tool_segmentation"));
+        setIconName(koIconNameCStr("tool_segmentation_point"));
         setPriority(9);
         setActivationShapeId(KRITA_TOOL_ACTIVATION_ID);
-    }
-
-    ~SelectSegmentFromPointToolFactory() override
-    {
     }
 
     KoToolBase *createTool(KoCanvasBase *canvas) override
