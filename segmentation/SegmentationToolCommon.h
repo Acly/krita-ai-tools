@@ -17,31 +17,41 @@
 
 class KisProcessingApplicator;
 
-namespace SegmentationToolCommon
+class SegmentationToolHelper
 {
+public:
+    SegmentationToolHelper();
 
-dlimgedit::Environment *initLibrary();
+    struct ImageInput {
+        KoCanvasBase *canvas = nullptr;
+        KisNodeSP node;
+        KisImageSP image;
+        int sampleLayersMode = 0;
+        QList<int> colorLabelsSelected;
+    };
 
-KisPaintDeviceSP
-mergeColorLayers(KisImageSP const &image, QList<int> const &selectedLayers, KisProcessingApplicator &applicator);
+    struct SelectionOptions {
+        SelectionAction action;
+        int grow;
+        int feather;
+        bool antiAlias;
+    };
 
-struct Image {
-    QImage data;
-    dlimgedit::ImageView view;
+    void processImage(ImageInput const &, KisProcessingApplicator &);
+    void processImage(ImageInput const &);
 
-    QRect rect() const
+    void applySelectionMask(ImageInput const &, QVariant const &pointOrRect, SelectionOptions const &);
+
+    void notifyImageChanged()
     {
-        return QRect(0, 0, data.width(), data.height());
+        m_requiresUpdate = true;
     }
+
+private:
+    dlimg::Environment const &m_env = nullptr;
+    dlimg::Segmentation m_segmentation = nullptr;
+    ImageInput m_lastInput;
+    bool m_requiresUpdate = true;
 };
-
-Image prepareImage(KisPaintDevice const &);
-
-void adjustSelection(KisPixelSelectionSP const &selection, int grow, int feather, bool antiAlias);
-
-dlimgedit::Point toPoint(QPoint const &);
-dlimgedit::Region toRegion(QRect const &);
-
-} // namespace SegmentationToolCommon
 
 #endif // SEGMENTATION_TOOL_COMMON_H_

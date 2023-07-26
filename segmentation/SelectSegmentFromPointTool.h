@@ -2,21 +2,16 @@
 #define SELECT_SEGMENT_FROM_POINT_TOOL_H_
 
 #include "KisSelectionToolFactoryBase.h"
+#include "SegmentationToolCommon.h"
 #include "kis_tool_select_base.h"
 #include <kis_icon.h>
-
-namespace dlimgedit
-{
-class Environment;
-}
 
 class SelectSegmentFromPointTool : public KisToolSelect
 {
     Q_OBJECT
 
 public:
-    SelectSegmentFromPointTool(KoCanvasBase *canvas);
-    ~SelectSegmentFromPointTool() override;
+    explicit SelectSegmentFromPointTool(KoCanvasBase *canvas);
 
     QWidget *createOptionWidget() override;
     void paint(QPainter &painter, const KoViewConverter &converter) override;
@@ -44,12 +39,14 @@ protected:
 
 public Q_SLOTS:
     void activate(const QSet<KoShape *> &shapes) override;
+    void deactivate() override;
+    void updateImage(QRect const &);
 
 protected:
     using KisToolSelectBase::m_widgetHelper;
 
 private:
-    dlimgedit::Environment *m_dlimgEnv = nullptr;
+    SegmentationToolHelper m_segmentation;
 };
 
 class SelectSegmentFromPointToolFactory : public KisSelectionToolFactoryBase

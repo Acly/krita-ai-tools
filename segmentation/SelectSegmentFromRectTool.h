@@ -2,20 +2,14 @@
 #define SELECT_SEGMENT_FROM_RECT_TOOL_H_
 
 #include "KisSelectionToolFactoryBase.h"
+#include "SegmentationToolCommon.h"
 #include "kis_tool_rectangle_base.h"
 #include "kis_tool_select_base.h"
 #include <kis_icon.h>
 
-namespace dlimgedit
-{
-class Environment;
-class Segmentation;
-}
-
 class RectangleForSegmentationTool : public KisToolRectangleBase
 {
     Q_OBJECT
-
 public:
     RectangleForSegmentationTool(KoCanvasBase *canvas);
 };
@@ -24,7 +18,7 @@ class SelectSegmentFromRectTool : public KisToolSelectBase<RectangleForSegmentat
 {
     Q_OBJECT
 public:
-    SelectSegmentFromRectTool(KoCanvasBase *canvas);
+    explicit SelectSegmentFromRectTool(KoCanvasBase *canvas);
     void resetCursorStyle() override;
 
 private:
@@ -32,9 +26,24 @@ private:
     void beginShape() override;
     void endShape() override;
 
+protected:
+    bool wantsAutoScroll() const override
+    {
+        return false;
+    }
+
+    bool isPixelOnly() const override
+    {
+        return true;
+    }
+
+    bool usesColorLabels() const override
+    {
+        return true;
+    }
+
 private:
-    QSharedPointer<dlimgedit::Segmentation> m_segmentation;
-    dlimgedit::Environment *m_dlimgEnv = nullptr;
+    SegmentationToolHelper m_segmentation;
 };
 
 class SelectSegmentFromRectToolFactory : public KisSelectionToolFactoryBase
