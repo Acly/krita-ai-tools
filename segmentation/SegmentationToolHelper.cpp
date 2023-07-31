@@ -44,7 +44,7 @@ struct Image {
 Image prepareImage(KisPaintDevice const &device)
 {
     Image result;
-    QRect bounds = device.defaultBounds()->bounds();
+    QRect bounds = device.exactBounds();
     KoColorSpace const *cs = device.colorSpace();
     if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
         // Stored as BGRA, 8 bits per channel in Krita. No conversions for now, the segmentation network expects
@@ -195,6 +195,12 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
             return;
         }
         if (!region.isValid()) {
+            return;
+        }
+    } else if (prompt.canConvert<QPoint>()) {
+        QPoint point = prompt.toPoint();
+
+        if (!input.image->bounds().contains(point, true)) {
             return;
         }
     }
