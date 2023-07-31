@@ -1,5 +1,4 @@
 #include "SelectSegmentFromRectTool.h"
-#include "SegmentationToolCommon.h"
 
 #include "canvas/kis_canvas2.h"
 #include "kis_command_utils.h"

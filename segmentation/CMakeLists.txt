@@ -4,9 +4,9 @@ install(DIRECTORY dlimgedit/bin/ DESTINATION ${BIN_INSTALL_DIR})
 install(DIRECTORY dlimgedit/models/ DESTINATION ${DATA_INSTALL_DIR}/krita/ai_models)
 
 set(kritatoolsegmentation_SOURCES
-    SegmentationToolCommon.cpp
-    SegmentationToolShared.cpp
+    SegmentationToolHelper.cpp
     SegmentationToolPlugin.cpp
+    SegmentationToolShared.cpp
     SelectSegmentFromPointTool.cpp
     SelectSegmentFromRectTool.cpp
     ../../tools/selectiontools/kis_selection_modifier_mapper.cc

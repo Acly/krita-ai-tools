@@ -1,4 +1,4 @@
-#include "SegmentationToolCommon.h"
+#include "SegmentationToolHelper.h"
 
 #include "KisOptionButtonStrip.h"
 #include "KoGroupButton.h"

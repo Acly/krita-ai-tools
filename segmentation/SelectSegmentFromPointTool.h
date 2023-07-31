@@ -2,7 +2,7 @@
 #define SELECT_SEGMENT_FROM_POINT_TOOL_H_
 
 #include "KisSelectionToolFactoryBase.h"
-#include "SegmentationToolCommon.h"
+#include "SegmentationToolHelper.h"
 #include "kis_tool_select_base.h"
 #include <kis_icon.h>
 
