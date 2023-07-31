@@ -15,6 +15,7 @@
 #include <QDebug>
 #include <QImage>
 #include <QLibrary>
+#include <QMessageBox>
 #include <QRect>
 
 namespace
@@ -119,6 +120,11 @@ bool operator!=(SegmentationToolHelper::ImageInput const &a, SegmentationToolHel
 SegmentationToolHelper::SegmentationToolHelper(QSharedPointer<SegmentationToolShared> shared)
     : m_shared(std::move(shared))
 {
+    connect(&m_segmentation,
+            SIGNAL(errorOccurred(QString const &)),
+            this,
+            SLOT(reportError(QString const &)),
+            Qt::QueuedConnection);
 }
 
 void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessingApplicator &applicator)
@@ -145,9 +151,9 @@ void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessing
         [segmentation = &m_segmentation, inputImage, env = &m_shared->environment()]() mutable -> KUndo2Command * {
             try {
                 auto image = prepareImage(*inputImage);
-                *segmentation = dlimg::Segmentation::process(image.view, *env);
+                segmentation->m = dlimg::Segmentation::process(image.view, *env);
             } catch (const std::exception &e) {
-                qWarning() << "[krita-ai-tools] Error during segmentation:" << e.what();
+                Q_EMIT segmentation->errorOccurred(QString(e.what()));
             }
             return nullptr;
         });
@@ -202,11 +208,11 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
 
     KisProcessingApplicator applicator(input.image,
                                        input.node,
-                                       KisProcessingApplicator::NO_IMAGE_UPDATES, // IS THIS SMART?!?
+                                       KisProcessingApplicator::NO_IMAGE_UPDATES, // XXX
                                        KisImageSignalVector(),
                                        kundo2_i18n("Select Segment"));
 
-    if (!m_segmentation || m_requiresUpdate || input != m_lastInput) {
+    if (m_requiresUpdate || input != m_lastInput) {
         processImage(input, applicator);
     }
 
@@ -214,18 +220,18 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
 
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
         [segmentation = &m_segmentation, prompt, selection, options]() mutable -> KUndo2Command * {
-            if (!(*segmentation)) {
+            if (!segmentation->m) {
                 qWarning() << "[krita-ai-tools] Segmentation not ready";
                 return nullptr;
             }
             try {
-                auto mask = prompt.canConvert<QPoint>() ? segmentation->compute_mask(convert(prompt.toPoint()))
-                                                        : segmentation->compute_mask(convert(prompt.toRect()));
+                auto mask = prompt.canConvert<QPoint>() ? segmentation->m.compute_mask(convert(prompt.toPoint()))
+                                                        : segmentation->m.compute_mask(convert(prompt.toRect()));
                 selection->writeBytes(mask.pixels(), QRect(0, 0, mask.extent().width, mask.extent().height));
                 adjustSelection(selection, options);
                 selection->invalidateOutlineCache();
             } catch (const std::exception &e) {
-                qWarning() << "[krita-ai-tools] Error during segmentation:" << e.what();
+                Q_EMIT segmentation->errorOccurred(QString(e.what()));
             }
             return nullptr;
         });
@@ -235,6 +241,13 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     applicator.end();
 
     QApplication::restoreOverrideCursor();
+}
+
+void SegmentationToolHelper::reportError(const QString &message)
+{
+    QMessageBox::warning(nullptr,
+                         i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
+                         i18n("Error during image segmentation: ") + message);
 }
 
 void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget)
@@ -262,6 +275,7 @@ void SegmentationToolHelper::updateBackend(dlimg::Backend backend)
 {
     m_backendCPUButton->setChecked(backend == dlimg::Backend::cpu);
     m_backendGPUButton->setChecked(backend == dlimg::Backend::gpu);
+    m_requiresUpdate = true;
 }
 
 void SegmentationToolHelper::switchBackend(KoGroupButton *button, bool checked)

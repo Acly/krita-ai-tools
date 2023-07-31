@@ -39,12 +39,10 @@ QSharedPointer<SegmentationToolShared> SegmentationToolShared::create()
 SegmentationToolShared::SegmentationToolShared()
 {
     if (!openLibrary(m_lib)) {
-        QString path = QCoreApplication::applicationDirPath(); // TODO: linux
-        QString library = "dlimgedit.dll"; // TODO: linux
-        QMessageBox::critical(
-            nullptr,
-            i18nc("@title:window", "Krita"),
-            i18n("Failed to load library '", library, "' from path", path, "\n", m_lib.errorString()));
+        QString path = QCoreApplication::applicationDirPath() + "/dlimgedit.dll"; // TODO: linux
+        QMessageBox::warning(nullptr,
+                             i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
+                             i18n("Failed to load library: ") + path + "\n" + m_lib.errorString());
         return;
     }
 
@@ -57,16 +55,16 @@ SegmentationToolShared::SegmentationToolShared()
 
     QString err = initialize(backend);
     if (!err.isEmpty()) {
-        QMessageBox::critical(nullptr,
-                              i18nc("@title:window", "Krita"),
-                              i18n("Failed to initialize segmentation tool plugin.\n", err));
+        QMessageBox::warning(nullptr,
+                             i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
+                             i18n("Failed to initialize segmentation tool plugin.\n") + err);
         return;
     }
 }
 
 QString SegmentationToolShared::initialize(dlimg::Backend backend)
 {
-    std::string modelDir = QString(KoResourcePaths::getApplicationRoot() + "/share/krita/ai_models").toStdString();
+    std::string modelDir = QString(KoResourcePaths::getApplicationRoot() + "share/krita/ai_models").toStdString();
     dlimg::Environment &env = backend == dlimg::Backend::gpu ? m_gpu : m_cpu;
     dlimg::Options opts;
     opts.model_directory = modelDir.c_str();
@@ -94,8 +92,8 @@ bool SegmentationToolShared::setBackend(dlimg::Backend backend)
     QString err = initialize(backend);
     if (!err.isEmpty()) {
         QMessageBox::warning(nullptr,
-                             i18nc("@title:window", "Krita"),
-                             i18n("Error while trying to switch segmentation backend.\n", err));
+                             i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
+                             i18n("Error while trying to switch segmentation backend.\n") + err);
         return false;
     }
     Q_EMIT backendChanged(m_backend);

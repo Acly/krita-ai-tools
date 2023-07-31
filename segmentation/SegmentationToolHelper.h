@@ -17,6 +17,15 @@
 class KisProcessingApplicator;
 class KoGroupButton;
 
+class SegmentationState : public QObject
+{
+    Q_OBJECT
+public:
+    dlimg::Segmentation m = nullptr;
+
+    Q_SIGNAL void errorOccurred(QString const &message);
+};
+
 // Class which implements the shared functionality for segmentation tools. Each tool has its own instance.
 class SegmentationToolHelper : QObject
 {
@@ -54,15 +63,18 @@ public:
 public Q_SLOTS:
     void switchBackend(KoGroupButton *, bool);
     void updateBackend(dlimg::Backend);
+    void reportError(QString const &);
 
 private:
+    // UI thread
     QSharedPointer<SegmentationToolShared> m_shared;
-    dlimg::Segmentation m_segmentation = nullptr;
     ImageInput m_lastInput;
     bool m_requiresUpdate = true;
-
     KoGroupButton *m_backendCPUButton = nullptr;
     KoGroupButton *m_backendGPUButton = nullptr;
+
+    // Stroke thread
+    SegmentationState m_segmentation;
 };
 
 #endif // SEGMENTATION_TOOL_COMMON_H_
