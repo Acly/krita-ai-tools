@@ -14,10 +14,12 @@
 #include "kis_selection_tool_helper.h"
 #include <kis_image_animation_interface.h>
 
-SelectSegmentFromPointTool::SelectSegmentFromPointTool(KoCanvasBase *canvas)
+SelectSegmentFromPointTool::SelectSegmentFromPointTool(KoCanvasBase *canvas,
+                                                       QSharedPointer<SegmentationToolShared> shared)
     : KisToolSelect(canvas,
                     KisCursor::load("tool_segmentation_point_cursor.png", 6, 6),
                     i18n("Segment Selection from Point"))
+    , m_segmentation(std::move(shared))
 {
     setObjectName("tool_select_segment_from_point");
 }
@@ -93,6 +95,7 @@ QWidget *SelectSegmentFromPointTool::createOptionWidget()
 {
     KisToolSelectBase::createOptionWidget();
     KisSelectionOptions *selectionWidget = selectionOptionWidget();
+    m_segmentation.addOptions(selectionWidget);
     return selectionWidget;
 }
 

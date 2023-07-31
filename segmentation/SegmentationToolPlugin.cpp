@@ -1,15 +1,13 @@
 #include "SegmentationToolPlugin.h"
+#include "SegmentationToolShared.h"
 #include "SelectSegmentFromPointTool.h"
 #include "SelectSegmentFromRectTool.h"
 
-#include <klocalizedstring.h>
-
-#include <kis_debug.h>
-#include <kpluginfactory.h>
-
 #include <KoToolRegistry.h>
+#include <kis_debug.h>
 #include <kis_global.h>
 #include <kis_types.h>
+#include <kpluginfactory.h>
 
 K_PLUGIN_FACTORY_WITH_JSON(SegmentationToolPluginFactory,
                            "kritatoolsegmentation.json",
@@ -18,8 +16,10 @@ K_PLUGIN_FACTORY_WITH_JSON(SegmentationToolPluginFactory,
 SegmentationToolPlugin::SegmentationToolPlugin(QObject *parent, const QVariantList &)
     : QObject(parent)
 {
-    KoToolRegistry::instance()->add(new SelectSegmentFromPointToolFactory());
-    KoToolRegistry::instance()->add(new SelectSegmentFromRectToolFactory());
+    if (QSharedPointer<SegmentationToolShared> shared = SegmentationToolShared::create()) {
+        KoToolRegistry::instance()->add(new SelectSegmentFromPointToolFactory(shared));
+        KoToolRegistry::instance()->add(new SelectSegmentFromRectToolFactory(shared));
+    }
 }
 
 SegmentationToolPlugin::~SegmentationToolPlugin()

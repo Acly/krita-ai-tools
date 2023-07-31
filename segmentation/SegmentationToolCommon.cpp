@@ -1,5 +1,7 @@
 #include "SegmentationToolCommon.h"
 
+#include "KisOptionButtonStrip.h"
+#include "KoGroupButton.h"
 #include "KoResourcePaths.h"
 #include "commands_new/KisMergeLabeledLayersCommand.h"
 #include "kis_command_utils.h"
@@ -10,59 +12,13 @@
 #include "kis_selection_tool_helper.h"
 
 #include <QApplication>
-#include <QCoreApplication>
 #include <QDebug>
 #include <QImage>
 #include <QLibrary>
 #include <QRect>
 
-#include <string>
-
 namespace
 {
-
-bool openLibrary(QLibrary &library)
-{
-    library.setFileName("dlimgedit");
-    if (!library.load()) {
-        qWarning() << "[krita-ai-tools] Failed to load library 'dlimgedit' from path"
-                   << QCoreApplication::applicationDirPath() << ":" << library.errorString();
-        return false;
-    }
-    using dlimgInitType = decltype(dlimg_init) *;
-    dlimgInitType dlimgInit = reinterpret_cast<dlimgInitType>(library.resolve("dlimg_init"));
-    dlimg::initialize(dlimgInit());
-    return true;
-}
-
-dlimg::Environment createEnvironment()
-{
-    std::string modelPath = QString(KoResourcePaths::getApplicationRoot() + "/share/krita/ai_models").toStdString();
-    dlimg::Options opts;
-    opts.model_path = modelPath.c_str();
-    opts.device = dlimg::Device::cpu;
-    try {
-        return dlimg::Environment(opts);
-    } catch (const std::exception &e) {
-        qWarning() << "[krita-ai-tools] Failed to initialize:" << e.what();
-    }
-    return nullptr;
-}
-
-struct Global {
-    QLibrary library;
-    dlimg::Environment environment{nullptr};
-} global;
-
-dlimg::Environment const &initLibrary()
-{
-    if (!global.library.isLoaded()) {
-        if (openLibrary(global.library)) {
-            global.environment = createEnvironment();
-        }
-    }
-    return global.environment;
-}
 
 dlimg::Point convert(QPoint const &point)
 {
@@ -160,16 +116,13 @@ bool operator!=(SegmentationToolHelper::ImageInput const &a, SegmentationToolHel
 //
 // SegmentationToolHelper
 
-SegmentationToolHelper::SegmentationToolHelper()
-    : m_env(initLibrary())
+SegmentationToolHelper::SegmentationToolHelper(QSharedPointer<SegmentationToolShared> shared)
+    : m_shared(std::move(shared))
 {
 }
 
 void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessingApplicator &applicator)
 {
-    if (!m_env) {
-        return;
-    }
     KisPaintDeviceSP layerImage;
     if (!input.node || !(layerImage = input.node->projection())) {
         return;
@@ -189,12 +142,10 @@ void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessing
     }
 
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
-        [segmentation = &m_segmentation, inputImage, env = &m_env]() mutable -> KUndo2Command * {
+        [segmentation = &m_segmentation, inputImage, env = &m_shared->environment()]() mutable -> KUndo2Command * {
             try {
-                qDebug() << "[krita-ai-tools] Segmentation started";
                 auto image = prepareImage(*inputImage);
                 *segmentation = dlimg::Segmentation::process(image.view, *env);
-                qDebug() << "[krita-ai-tools] Segmentation finished";
             } catch (const std::exception &e) {
                 qWarning() << "[krita-ai-tools] Error during segmentation:" << e.what();
             }
@@ -222,9 +173,6 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
                                                 QVariant const &prompt,
                                                 SelectionOptions const &options)
 {
-    if (!m_env) {
-        return;
-    }
     KisCanvas2 *kisCanvas = dynamic_cast<KisCanvas2 *>(input.canvas);
     if (!kisCanvas) {
         return;
@@ -271,8 +219,8 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
                 return nullptr;
             }
             try {
-                auto mask = prompt.canConvert<QPoint>() ? segmentation->get_mask(convert(prompt.toPoint()))
-                                                        : segmentation->get_mask(convert(prompt.toRect()));
+                auto mask = prompt.canConvert<QPoint>() ? segmentation->compute_mask(convert(prompt.toPoint()))
+                                                        : segmentation->compute_mask(convert(prompt.toRect()));
                 selection->writeBytes(mask.pixels(), QRect(0, 0, mask.extent().width, mask.extent().height));
                 adjustSelection(selection, options);
                 selection->invalidateOutlineCache();
@@ -287,4 +235,45 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     applicator.end();
 
     QApplication::restoreOverrideCursor();
+}
+
+void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget)
+{
+    KisOptionButtonStrip *backendSelect = new KisOptionButtonStrip;
+    m_backendCPUButton = backendSelect->addButton(i18n("CPU"));
+    m_backendCPUButton->setChecked(m_shared->backend() == dlimg::Backend::cpu);
+    m_backendGPUButton = backendSelect->addButton(i18n("GPU"));
+    m_backendGPUButton->setEnabled(dlimg::Environment::is_supported(dlimg::Backend::gpu));
+    m_backendGPUButton->setChecked(m_shared->backend() == dlimg::Backend::gpu);
+
+    KisOptionCollectionWidgetWithHeader *segmentationBackendSection =
+        new KisOptionCollectionWidgetWithHeader(i18n("Segmentation Backend"));
+    segmentationBackendSection->setPrimaryWidget(backendSelect);
+    selectionWidget->insertWidget(2, "segmentationBackendSection", segmentationBackendSection);
+
+    connect(backendSelect,
+            SIGNAL(buttonToggled(KoGroupButton *, bool)),
+            this,
+            SLOT(switchBackend(KoGroupButton *, bool)));
+    connect(m_shared.get(), SIGNAL(backendChanged(dlimg::Backend)), this, SLOT(updateBackend(dlimg::Backend)));
+}
+
+void SegmentationToolHelper::updateBackend(dlimg::Backend backend)
+{
+    m_backendCPUButton->setChecked(backend == dlimg::Backend::cpu);
+    m_backendGPUButton->setChecked(backend == dlimg::Backend::gpu);
+}
+
+void SegmentationToolHelper::switchBackend(KoGroupButton *button, bool checked)
+{
+    if (checked) {
+        bool success = m_shared->setBackend(button == m_backendCPUButton ? dlimg::Backend::cpu : dlimg::Backend::gpu);
+        if (!success) {
+            button->setEnabled(false);
+            KoGroupButton *prev = m_shared->backend() == dlimg::Backend::cpu ? m_backendCPUButton : m_backendGPUButton;
+            bool blocked = prev->blockSignals(true);
+            prev->setChecked(true);
+            prev->blockSignals(blocked);
+        }
+    }
 }

@@ -15,8 +15,10 @@ RectangleForSegmentationTool::RectangleForSegmentationTool(KoCanvasBase *canvas)
     setObjectName("tool_select_segment_from_rect");
 }
 
-SelectSegmentFromRectTool::SelectSegmentFromRectTool(KoCanvasBase *canvas)
+SelectSegmentFromRectTool::SelectSegmentFromRectTool(KoCanvasBase *canvas,
+                                                     QSharedPointer<SegmentationToolShared> shared)
     : KisToolSelectBase<RectangleForSegmentationTool>(canvas, i18n("Segment Selection (Box)"))
+    , m_segmentation(std::move(shared))
 {
 }
 
@@ -51,6 +53,14 @@ void SelectSegmentFromRectTool::finishRect(const QRectF &rect, qreal /*roundCorn
     options.antiAlias = antiAliasSelection();
 
     m_segmentation.applySelectionMask(input, region, options);
+}
+
+QWidget *SelectSegmentFromRectTool::createOptionWidget()
+{
+    KisToolSelectBase<RectangleForSegmentationTool>::createOptionWidget();
+    KisSelectionOptions *selectionWidget = selectionOptionWidget();
+    m_segmentation.addOptions(selectionWidget);
+    return selectionWidget;
 }
 
 void SelectSegmentFromRectTool::resetCursorStyle()
