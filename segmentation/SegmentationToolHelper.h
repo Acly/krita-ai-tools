@@ -3,6 +3,7 @@
 
 #include "SegmentationToolShared.h"
 
+#include "commands_new/KisMergeLabeledLayersCommand.h"
 #include "kis_image.h"
 #include "kis_paint_device.h"
 #include "kis_pixel_selection.h"
@@ -60,16 +61,24 @@ public:
         m_requiresUpdate = true;
     }
 
+    void deactivate();
+
 public Q_SLOTS:
     void switchBackend(KoGroupButton *, bool);
     void updateBackend(dlimg::Backend);
     void reportError(QString const &);
 
 private:
+    KisPaintDeviceSP
+    mergeColorLayers(KisImageSP const &image, QList<int> const &selectedLayers, KisProcessingApplicator &applicator);
+
     // UI thread
     QSharedPointer<SegmentationToolShared> m_shared;
     ImageInput m_lastInput;
     bool m_requiresUpdate = true;
+    KisPaintDeviceSP m_referencePaintDevice;
+    KisMergeLabeledLayersCommand::ReferenceNodeInfoListSP m_referenceNodeList;
+    int m_previousTime = 0;
     KoGroupButton *m_backendCPUButton = nullptr;
     KoGroupButton *m_backendGPUButton = nullptr;
 

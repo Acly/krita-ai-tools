@@ -40,6 +40,7 @@ void SelectSegmentFromPointTool::deactivate()
 
     KisImage *image = currentImage().data();
     disconnect(image, SIGNAL(sigImageUpdated(QRect)), this, SLOT(updateImage(QRect)));
+    m_segmentation.deactivate();
 }
 
 void SelectSegmentFromPointTool::updateImage(QRect const &)

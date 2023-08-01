@@ -21,10 +21,21 @@ SelectSegmentFromRectTool::SelectSegmentFromRectTool(KoCanvasBase *canvas,
 {
 }
 
+void SelectSegmentFromRectTool::deactivate()
+{
+    m_segmentation.deactivate();
+    Base::deactivate();
+}
+
+void SelectSegmentFromRectTool::beginPrimaryAction(KoPointerEvent *event)
+{
+    m_segmentation.processImage({canvas(), currentNode(), currentImage(), sampleLayersMode(), colorLabelsSelected()});
+    Base::beginPrimaryAction(event);
+}
+
 void SelectSegmentFromRectTool::beginShape()
 {
     beginSelectInteraction();
-    m_segmentation.processImage({canvas(), currentNode(), currentImage(), sampleLayersMode(), colorLabelsSelected()});
 }
 
 void SelectSegmentFromRectTool::endShape()
@@ -39,12 +50,14 @@ void SelectSegmentFromRectTool::finishRect(const QRectF &rect, qreal /*roundCorn
     }
 
     QRect region = rect.normalized().toRect();
+
     SegmentationToolHelper::ImageInput input;
     input.canvas = canvas();
     input.image = currentImage();
     input.node = currentNode();
     input.sampleLayersMode = sampleLayersMode();
     input.colorLabelsSelected = colorLabelsSelected();
+
     SegmentationToolHelper::SelectionOptions options;
     options.action = selectionAction();
     options.grow = growSelection();
@@ -56,7 +69,7 @@ void SelectSegmentFromRectTool::finishRect(const QRectF &rect, qreal /*roundCorn
 
 QWidget *SelectSegmentFromRectTool::createOptionWidget()
 {
-    KisToolSelectBase<RectangleForSegmentationTool>::createOptionWidget();
+    Base::createOptionWidget();
     KisSelectionOptions *selectionWidget = selectionOptionWidget();
     m_segmentation.addOptions(selectionWidget);
     return selectionWidget;
@@ -73,6 +86,6 @@ void SelectSegmentFromRectTool::resetCursorStyle()
     } else if (selectionAction() == SELECTION_SYMMETRICDIFFERENCE) {
         useCursor(KisCursor::load("tool_segmentation_rect_cursor_symdiff.png", 6, 6));
     } else {
-        KisToolSelectBase<RectangleForSegmentationTool>::resetCursorStyle();
+        Base::resetCursorStyle();
     }
 }

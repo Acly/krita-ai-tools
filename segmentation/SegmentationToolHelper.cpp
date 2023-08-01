@@ -1,10 +1,11 @@
 #include "SegmentationToolHelper.h"
 
+#include "KisCursorOverrideLock.h"
 #include "KisOptionButtonStrip.h"
 #include "KoGroupButton.h"
 #include "KoResourcePaths.h"
-#include "commands_new/KisMergeLabeledLayersCommand.h"
 #include "kis_command_utils.h"
+#include "kis_default_bounds.h"
 #include "kis_image_animation_interface.h"
 #include "kis_paint_device.h"
 #include "kis_selection.h"
@@ -61,26 +62,6 @@ Image prepareImage(KisPaintDevice const &device)
     result.view.stride = result.data.bytesPerLine();
     result.view.pixels = result.data.bits();
     return result;
-}
-
-KisPaintDeviceSP
-mergeColorLayers(KisImageSP const &image, QList<int> const &selectedLayers, KisProcessingApplicator &applicator)
-{
-    KisImageSP refImage = KisMergeLabeledLayersCommand::createRefImage(image, "Segmentation Tool Ref Image");
-    refImage->animationInterface()->switchCurrentTimeAsync(image->animationInterface()->currentTime());
-    refImage->waitForDone();
-
-    KisPaintDeviceSP merged =
-        KisMergeLabeledLayersCommand::createRefPaintDevice(image, "Segmentation Tool Ref Paint Device");
-
-    KisMergeLabeledLayersCommand *command =
-        new KisMergeLabeledLayersCommand(refImage,
-                                         merged,
-                                         image->root(),
-                                         selectedLayers,
-                                         KisMergeLabeledLayersCommand::GroupSelectionPolicy_SelectIfColorLabeled);
-    applicator.applyCommand(command, KisStrokeJobData::SEQUENTIAL, KisStrokeJobData::EXCLUSIVE);
-    return merged;
 }
 
 void adjustSelection(KisPixelSelectionSP const &selection, SegmentationToolHelper::SelectionOptions const &o)
@@ -158,7 +139,7 @@ void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessing
             return nullptr;
         });
 
-    applicator.applyCommand(cmd, KisStrokeJobData::BARRIER);
+    applicator.applyCommand(cmd, KisStrokeJobData::SEQUENTIAL, KisStrokeJobData::EXCLUSIVE);
 
     m_lastInput = input;
     m_requiresUpdate = false;
@@ -210,7 +191,7 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
         return;
     }
 
-    QApplication::setOverrideCursor(KisCursor::waitCursor());
+    KisCursorOverrideLock cursorLock(KisCursor::waitCursor());
 
     KisProcessingApplicator applicator(input.image,
                                        input.node,
@@ -241,12 +222,10 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
             }
             return nullptr;
         });
-    applicator.applyCommand(cmd, KisStrokeJobData::BARRIER);
+    applicator.applyCommand(cmd, KisStrokeJobData::SEQUENTIAL);
 
     helper.selectPixelSelection(applicator, selection, options.action);
     applicator.end();
-
-    QApplication::restoreOverrideCursor();
 }
 
 void SegmentationToolHelper::reportError(const QString &message)
@@ -254,6 +233,43 @@ void SegmentationToolHelper::reportError(const QString &message)
     QMessageBox::warning(nullptr,
                          i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
                          i18n("Error during image segmentation: ") + message);
+}
+
+KisPaintDeviceSP SegmentationToolHelper::mergeColorLayers(KisImageSP const &image,
+                                                          QList<int> const &selectedLayers,
+                                                          KisProcessingApplicator &applicator)
+{
+    if (!m_referenceNodeList) {
+        m_referencePaintDevice =
+            KisMergeLabeledLayersCommand::createRefPaintDevice(image, "Segmentation Tool Reference");
+        m_referenceNodeList.reset(new KisMergeLabeledLayersCommand::ReferenceNodeInfoList);
+    }
+    KisPaintDeviceSP newReferencePaintDevice =
+        KisMergeLabeledLayersCommand::createRefPaintDevice(image, "Segmentation Tool Reference");
+    KisMergeLabeledLayersCommand::ReferenceNodeInfoListSP newReferenceNodeList(
+        new KisMergeLabeledLayersCommand::ReferenceNodeInfoList);
+    const int currentTime = image->animationInterface()->currentTime();
+    applicator.applyCommand(
+        new KisMergeLabeledLayersCommand(image,
+                                         m_referenceNodeList,
+                                         newReferenceNodeList,
+                                         m_referencePaintDevice,
+                                         newReferencePaintDevice,
+                                         selectedLayers,
+                                         KisMergeLabeledLayersCommand::GroupSelectionPolicy_SelectIfColorLabeled,
+                                         m_previousTime != currentTime),
+        KisStrokeJobData::SEQUENTIAL,
+        KisStrokeJobData::EXCLUSIVE);
+    m_referencePaintDevice = newReferencePaintDevice;
+    m_referenceNodeList = newReferenceNodeList;
+    m_previousTime = currentTime;
+    return m_referencePaintDevice;
+}
+
+void SegmentationToolHelper::deactivate()
+{
+    m_referencePaintDevice = nullptr;
+    m_referenceNodeList = nullptr;
 }
 
 void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget)

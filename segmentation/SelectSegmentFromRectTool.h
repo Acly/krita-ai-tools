@@ -18,14 +18,21 @@ class SelectSegmentFromRectTool : public KisToolSelectBase<RectangleForSegmentat
 {
     Q_OBJECT
 public:
+    using Base = KisToolSelectBase<RectangleForSegmentationTool>;
+
     explicit SelectSegmentFromRectTool(KoCanvasBase *canvas, QSharedPointer<SegmentationToolShared>);
     QWidget *createOptionWidget() override;
     void resetCursorStyle() override;
+
+    void beginPrimaryAction(KoPointerEvent *) override;
 
 private:
     void finishRect(const QRectF &rect, qreal roundCornersX, qreal roundCornersY) override;
     void beginShape() override;
     void endShape() override;
+
+public Q_SLOTS:
+    void deactivate() override;
 
 protected:
     bool wantsAutoScroll() const override
