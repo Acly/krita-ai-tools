@@ -6,9 +6,13 @@ Plugin which adds selection tools to mask objects in your image with a single cl
 
 Click on things to select them!
 
+https://github.com/Acly/krita-ai-tools/assets/6485914/71fe2bb4-9b00-4eab-b6b7-4e9aa50d2511
+
 <h2><img src="media/tool_segmentation_rect.png"> Select Segment from Box</h2>
 
 Draw a box around things to select them!
+
+https://github.com/Acly/krita-ai-tools/assets/6485914/38d92925-3146-4489-a2ea-a1d3aa57c72c
 
 ## Limitations
 
@@ -22,7 +26,7 @@ The current version of the plugin requires [Krita 5.2.0 (Beta1)](https://krita.o
 
 ### Windows
 
-To install, simply unpack the ZIP archive into your Krita installation folder. If Krita is running you have to restart it.
+[Download the plugin](https://github.com/Acly/krita-ai-tools/releases/download/v1.0.0pre/krita_segmentation_plugin-windows-x64-1.0.0pre.zip) and unpack the ZIP archive into your Krita installation folder. Then run Krita.
 
 ### Linux
 
