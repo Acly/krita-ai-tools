@@ -1,2 +1,5 @@
 .vscode
 *.kra
+*.kra~
+*.png~
+drawing.svg

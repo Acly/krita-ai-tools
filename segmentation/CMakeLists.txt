@@ -1,5 +1,23 @@
-add_library(dlimgedit INTERFACE IMPORTED)
-set_target_properties(dlimgedit PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/dlimgedit/include)
+# dlimgedit dependency
+
+if(WIN32 OR MINGW)
+    set(DLIMGEDIT_OS windows)
+else()
+    set(DLIMGEDIT_OS linux)
+endif()
+include(FetchContent)
+FetchContent_Declare(dlimgedit
+    URL https://github.com/Acly/dlimgedit/releases/download/v1.0.0/dlimgedit-${DLIMGEDIT_OS}-x64-1.0.0.zip
+    DOWNLOAD_EXTRACT_TIMESTAMP true
+)
+FetchContent_MakeAvailable(dlimgedit)
+
+# Don't statically link to dlimgedit on Windows (built with MSVC)
+add_library(dlimgedit_dynamic INTERFACE IMPORTED)
+set_target_properties(dlimgedit_dynamic PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${dlimgedit_SOURCE_DIR}/include)
+
+
+# Segmentation tools plugin
 
 set(kritatoolsegmentation_SOURCES
     SegmentationToolHelper.cpp
@@ -17,11 +35,11 @@ kis_add_library(kritatoolsegmentation MODULE ${kritatoolsegmentation_SOURCES})
 generate_export_header(kritatoolsegmentation BASE_NAME kritatoolsegmentation)
 
 target_include_directories(kritatoolsegmentation PRIVATE ../../tools/selectiontools)
-target_link_libraries(kritatoolsegmentation PRIVATE kritaui kritabasicflakes kritaimage dlimgedit)
+target_link_libraries(kritatoolsegmentation PRIVATE kritaui kritabasicflakes kritaimage dlimgedit_dynamic)
 
 # Install into krita install prefix to test & run
-install(DIRECTORY dlimgedit/bin/ DESTINATION ${BIN_INSTALL_DIR})
-install(DIRECTORY dlimgedit/models/ DESTINATION ${DATA_INSTALL_DIR}/krita/ai_models)
+install(DIRECTORY ${dlimgedit_SOURCE_DIR}/bin/ DESTINATION ${BIN_INSTALL_DIR})
+install(DIRECTORY ${dlimgedit_SOURCE_DIR}/models/ DESTINATION ${DATA_INSTALL_DIR}/krita/ai_models)
 install(TARGETS kritatoolsegmentation DESTINATION ${KRITA_PLUGIN_INSTALL_DIR})
 install(FILES
     SelectSegmentFromPointTool.action
@@ -32,8 +50,8 @@ install(FILES
 # Install into isolated directory for packaging the plugin only
 set(PACKAGE_DIR ${CMAKE_INSTALL_PREFIX}/../krita-plugin-segmentation)
 install(TARGETS kritatoolsegmentation DESTINATION ${PACKAGE_DIR}/${KRITA_PLUGIN_INSTALL_DIR})
-install(DIRECTORY dlimgedit/bin/ DESTINATION ${PACKAGE_DIR}/${BIN_INSTALL_DIR})
-install(DIRECTORY dlimgedit/models/ 
+install(DIRECTORY ${dlimgedit_SOURCE_DIR}/bin/ DESTINATION ${PACKAGE_DIR}/${BIN_INSTALL_DIR})
+install(DIRECTORY ${dlimgedit_SOURCE_DIR}/models/ 
     DESTINATION ${PACKAGE_DIR}/${DATA_INSTALL_DIR}/krita/ai_models
     FILES_MATCHING PATTERN "mobile_sam_image_encoder.onnx" PATTERN "sam_mask_decoder_single.onnx"
 )
