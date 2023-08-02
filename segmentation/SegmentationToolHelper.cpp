@@ -40,12 +40,20 @@ struct Image {
     {
         return QRect(0, 0, data.width(), data.height());
     }
+
+    explicit operator bool() const
+    {
+        return !data.isNull();
+    }
 };
 
 Image prepareImage(KisPaintDevice const &device)
 {
     Image result;
     QRect bounds = device.exactBounds();
+    if (bounds.isEmpty()) {
+        return result; // Can happen eg. when using color label mode without matching layers.
+    }
     KoColorSpace const *cs = device.colorSpace();
     if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
         // Stored as BGRA, 8 bits per channel in Krita. No conversions for now, the segmentation network expects
@@ -131,8 +139,11 @@ void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessing
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
         [segmentation = &m_segmentation, inputImage, env = &m_shared->environment()]() mutable -> KUndo2Command * {
             try {
-                auto image = prepareImage(*inputImage);
-                segmentation->m = dlimg::Segmentation::process(image.view, *env);
+                if (Image image = prepareImage(*inputImage)) {
+                    segmentation->m = dlimg::Segmentation::process(image.view, *env);
+                } else {
+                    segmentation->m = nullptr;
+                }
             } catch (const std::exception &e) {
                 Q_EMIT segmentation->errorOccurred(QString(e.what()));
             }
@@ -208,8 +219,7 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
         [segmentation = &m_segmentation, prompt, selection, options]() mutable -> KUndo2Command * {
             if (!segmentation->m) {
-                qWarning() << "[krita-ai-tools] Segmentation not ready";
-                return nullptr;
+                return nullptr; // Early out when there was no input image to process.
             }
             try {
                 auto mask = prompt.canConvert<QPoint>() ? segmentation->m.compute_mask(convert(prompt.toPoint()))
