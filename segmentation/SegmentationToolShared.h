@@ -1,7 +1,7 @@
 #ifndef SEGMENTATION_TOOL_SHARED_H_
 #define SEGMENTATION_TOOL_SHARED_H_
 
-#include <KConfigGroup.h>
+#include <kconfiggroup.h>
 
 #define DLIMGEDIT_LOAD_DYNAMIC
 #define DLIMGEDIT_NO_FILESYSTEM
@@ -29,6 +29,9 @@ public:
 
 Q_SIGNALS:
     void backendChanged(dlimg::Backend);
+
+private Q_SLOTS:
+    void cleanUp();
 
 private:
     SegmentationToolShared();
