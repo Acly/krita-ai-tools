@@ -18,19 +18,29 @@ https://github.com/Acly/krita-ai-tools/assets/6485914/38d92925-3146-4489-a2ea-a1
 
 Object detection works quite well in both photos and artwork. As a solution for masking the rough shape of distinct objects and regions it is usually much quicker than lasso tool, and more flexible than contiguous selection tool ("magic wand"). Computation is instantanious for medium resolution on recent hardware (especially GPU), for high resolutions there is a noticeable delay.
 
-The generated masks are binary masks, and typically not pixel-perfect, especially for large resolutions (the mask is always an upscale from 1024x1024). It might be possible to improve with tiling, but workflows which require precise masking would still have to invest manual work.
+The generated masks are binary masks, and typically not pixel-perfect, especially for large resolutions (the mask is always an upscale from 1024x1024). It might be possible to improve with tiling, or a subsequent alpha-matte step.
 
 ## Installation
 
-The current version of the plugin requires [Krita 5.2.0 (Beta1)](https://krita.org/en/item/first-beta-for-krita-5-2-0-released/).
+The current version of the plugin requires [Krita 5.2.0 (Beta1)](https://krita.org/en/item/first-beta-for-krita-5-2-0-released/)!
+
+You can download the latest version of the plugin from the [releases page](https://github.com/Acly/krita-ai-tools/releases).
 
 ### Windows
 
-[Download the plugin](https://github.com/Acly/krita-ai-tools/releases/download/v1.0.0pre/krita_segmentation_plugin-windows-x64-1.0.0pre.zip) and unpack the ZIP archive into your Krita installation folder. Then run Krita.
+Download the plugin and unpack the ZIP archive into your Krita installation folder. Then run Krita.
 
 ### Linux
 
-Currently no pre-built binaries available, but the plugin can be built from source.
+Easiest way is to download the AppImage, make it executable and run it. It contains the entirety of Krita, repackaged with the plugin.
+
+Alternatively get the Krita AppImage from the official source and extract it. This should result in a folder `squashfs-root`. Download the plugin `tar.gz` and extract it into that folder. Then run Krita. See the commands below for some environment variables that are needed to run outside the image.
+
+```sh
+./krita-5.2.0-beta1-x86_64.appimage --appimage-extract
+tar -xf krita_segmentation_plugin-linux-x64-1.0.0.tar.gz -C squashfs-root/
+APPDIR=/squashfs-root APPIMAGE=1 ./squashfs-root/AppRun
+```
 
 ## Building
 
