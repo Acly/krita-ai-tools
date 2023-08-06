@@ -43,19 +43,19 @@ kis_add_library(kritatoolsegmentation MODULE ${kritatoolsegmentation_SOURCES})
 generate_export_header(kritatoolsegmentation BASE_NAME kritatoolsegmentation)
 
 target_include_directories(kritatoolsegmentation PRIVATE ../../tools/selectiontools)
-target_link_libraries(kritatoolsegmentation PRIVATE kritaui kritabasicflakes kritaimage dlimgedit_dynamic dl)
+target_link_libraries(kritatoolsegmentation PRIVATE kritaui kritabasicflakes kritaimage dlimgedit_dynamic $<$<PLATFORM_ID:Linux>:dl>)
 
 # Install
 set(MODELS_FILTER FILES_MATCHING PATTERN "mobile_sam_image_encoder.onnx" PATTERN "sam_mask_decoder_single.onnx")
 set(ONNX_FILTER FILES_MATCHING PATTERN "*onnxruntime.*")
-get_target_property(ONNXRUNTIME_LIB_FILE onnxruntime IMPORTED_LOCATION)
-cmake_path(GET ONNXRUNTIME_LIB_FILE PARENT_PATH ONNXRUNTIME_LIB_DIR)
 
 # Install into krita install prefix to run & test
 install(TARGETS kritatoolsegmentation DESTINATION ${KRITA_PLUGIN_INSTALL_DIR})
 if(WIN32)
     install(DIRECTORY ${dlimgedit_SOURCE_DIR}/bin/ DESTINATION ${BIN_INSTALL_DIR})
 else()
+    get_target_property(ONNXRUNTIME_LIB_FILE onnxruntime IMPORTED_LOCATION)
+    cmake_path(GET ONNXRUNTIME_LIB_FILE PARENT_PATH ONNXRUNTIME_LIB_DIR)
     install(TARGETS dlimgedit DESTINATION ${KRITA_PLUGIN_INSTALL_DIR}/toolsegmentation)
     install(DIRECTORY ${ONNXRUNTIME_LIB_DIR}/ DESTINATION ${KRITA_PLUGIN_INSTALL_DIR}/toolsegmentation ${ONNX_FILTER})
 endif()    
