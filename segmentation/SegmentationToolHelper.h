@@ -13,8 +13,8 @@
 #include <QList>
 #include <QPoint>
 #include <QRect>
-#include <QSharedPointer>
 #include <QScopedPointer>
+#include <QSharedPointer>
 
 class KisProcessingApplicator;
 class KoGroupButton;
@@ -70,11 +70,10 @@ public Q_SLOTS:
 
 private:
     KisPaintDeviceSP mergeColorLayers(KisImageSP const &, QList<int> const &selectedLayers, KisProcessingApplicator &);
-    KisProcessingApplicator& createApplicator(ImageInput const&);
+    void processImage(ImageInput const &, KisProcessingApplicator &);
 
     // UI thread
     QSharedPointer<SegmentationToolShared> m_shared;
-    QScopedPointer<KisProcessingApplicator> m_applicator;
     ImageInput m_lastInput;
     QRect m_bounds;
     bool m_requiresUpdate = true;

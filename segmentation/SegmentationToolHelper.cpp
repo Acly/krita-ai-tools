@@ -111,26 +111,13 @@ SegmentationToolHelper::SegmentationToolHelper(QSharedPointer<SegmentationToolSh
             Qt::QueuedConnection);
 }
 
-KisProcessingApplicator &SegmentationToolHelper::createApplicator(ImageInput const &input)
-{
-    if (!m_applicator) {
-        m_applicator.reset(new KisProcessingApplicator(input.image,
-                                                       input.node,
-                                                       KisProcessingApplicator::NO_IMAGE_UPDATES, // XXX
-                                                       KisImageSignalVector(),
-                                                       kundo2_i18n("Select Segment")));
-    }
-    return *m_applicator;
-}
-
-void SegmentationToolHelper::processImage(ImageInput const &input)
+void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessingApplicator &applicator)
 {
     KisPaintDeviceSP layerImage;
     if (!input.node || !(layerImage = input.node->projection())) {
         return;
     }
 
-    KisProcessingApplicator &applicator = createApplicator(input);
     KisPaintDeviceSP inputImage;
     switch (input.sampleLayersMode) {
     case KisToolSelect::SampleAllLayers:
@@ -163,6 +150,17 @@ void SegmentationToolHelper::processImage(ImageInput const &input)
     m_lastInput = input;
     m_bounds = inputImage->exactBounds();
     m_requiresUpdate = false;
+}
+
+void SegmentationToolHelper::processImage(ImageInput const &input)
+{
+    KisProcessingApplicator applicator(input.image,
+                                       input.node,
+                                       KisProcessingApplicator::NO_IMAGE_UPDATES, // XXX
+                                       KisImageSignalVector(),
+                                       kundo2_i18n("Select Segment"));
+    processImage(input, applicator);
+    applicator.end();
 }
 
 void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
@@ -206,10 +204,14 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
 
     KisCursorOverrideLock cursorLock(KisCursor::waitCursor());
 
-    KisProcessingApplicator &applicator = createApplicator(input);
+    KisProcessingApplicator applicator(input.image,
+                                       input.node,
+                                       KisProcessingApplicator::NO_IMAGE_UPDATES, // XXX
+                                       KisImageSignalVector(),
+                                       kundo2_i18n("Select Segment"));
 
     if (m_requiresUpdate || input != m_lastInput) {
-        processImage(input);
+        processImage(input, applicator);
     }
 
     KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(layerImage));
@@ -222,7 +224,8 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
             try {
                 auto mask = prompt.canConvert<QPoint>() ? segmentation->m.compute_mask(convert(prompt.toPoint()))
                                                         : segmentation->m.compute_mask(convert(prompt.toRect()));
-                selection->writeBytes(mask.pixels(), QRect(bounds.x(), bounds.y(), mask.extent().width, mask.extent().height));
+                selection->writeBytes(mask.pixels(),
+                                      QRect(bounds.x(), bounds.y(), mask.extent().width, mask.extent().height));
                 adjustSelection(selection, options);
                 selection->invalidateOutlineCache();
             } catch (const std::exception &e) {
@@ -234,7 +237,6 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
 
     helper.selectPixelSelection(applicator, selection, options.action);
     applicator.end();
-    m_applicator.reset();
 }
 
 void SegmentationToolHelper::reportError(const QString &message)
