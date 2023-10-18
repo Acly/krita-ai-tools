@@ -22,7 +22,7 @@ The generated masks are binary masks, and typically not pixel-perfect, especiall
 
 ## Installation
 
-The current version of the plugin is built for [Krita 5.2.0 RC1](https://krita.org/en/item/krita-5-2-release-candidate-is-out/). Using it with other versions may lead to crashes.
+The current version of the plugin is built for [Krita 5.2.0](https://krita.org/en/download/krita-desktop/). Using it with other versions may lead to crashes.
 
 You can download the latest version of the plugin from the [releases page](https://github.com/Acly/krita-ai-tools/releases).
 
@@ -32,13 +32,11 @@ Download the plugin and unpack the ZIP archive into your Krita installation fold
 
 ### Linux
 
-Easiest way is to download the AppImage, make it executable and run it. It contains the entirety of Krita, repackaged with the plugin, but is only available for some versions.
-
-Alternatively get the Krita AppImage from the official source and extract it. This should result in a folder `squashfs-root`. Download the plugin `tar.gz` and extract it into that folder. Then run Krita. See the commands below for some environment variables that are needed to run outside the image.
+Get the Krita AppImage from the official source and extract it. This should result in a folder `squashfs-root`. Download the plugin `tar.gz` and extract it into that folder. Then run Krita. See the commands below for some environment variables that are needed to run outside the image.
 
 ```sh
-./krita-5.2.0-rc1-x86_64.appimage --appimage-extract
-tar -xf krita_segmentation_plugin-linux-x64-1.0.1.tar.gz -C squashfs-root/
+./krita-5.2.0-x86_64.appimage --appimage-extract
+tar -xf krita_segmentation_plugin-linux-x64-1.0.2.tar.gz -C squashfs-root/
 APPDIR=/squashfs-root APPIMAGE=1 ./squashfs-root/AppRun
 ```
 
