@@ -36,11 +36,6 @@ struct Image {
     QImage data;
     dlimg::ImageView view;
 
-    QRect rect() const
-    {
-        return QRect(0, 0, data.width(), data.height());
-    }
-
     explicit operator bool() const
     {
         return !data.isNull();
@@ -60,7 +55,7 @@ Image prepareImage(KisPaintDevice const &device)
         // gamma-compressed sRGB, but works fine with other color spaces (probably).
         result.view.channels = dlimg::Channels::bgra;
         result.data = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
-        device.readBytes(result.data.bits(), 0, 0, bounds.width(), bounds.height());
+        device.readBytes(result.data.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
     } else {
         // Convert everything else to QImage::Format_ARGB32 in default color space (sRGB).
         result.view.channels = dlimg::Channels::argb;
@@ -166,11 +161,12 @@ void SegmentationToolHelper::processImage(ImageInput const &input)
     applicator.applyCommand(cmd, KisStrokeJobData::SEQUENTIAL, KisStrokeJobData::EXCLUSIVE);
 
     m_lastInput = input;
+    m_bounds = inputImage->exactBounds();
     m_requiresUpdate = false;
 }
 
 void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
-                                                QVariant const &prompt,
+                                                QVariant prompt,
                                                 SelectionOptions const &options)
 {
     KisCanvas2 *kisCanvas = dynamic_cast<KisCanvas2 *>(input.canvas);
@@ -180,7 +176,9 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     KisSelectionToolHelper helper(kisCanvas, kundo2_i18n("Segment Selection"));
 
     if (prompt.canConvert<QRect>()) {
-        QRect region = prompt.toRect();
+        QRect region = prompt.toRect().intersected(m_bounds);
+        region.translate(-m_bounds.topLeft());
+        prompt = region;
 
         if (helper.tryDeselectCurrentSelection(QRectF(region), options.action)) {
             return;
@@ -194,9 +192,11 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     } else if (prompt.canConvert<QPoint>()) {
         QPoint point = prompt.toPoint();
 
-        if (!input.image->bounds().contains(point, true)) {
+        if (!m_bounds.contains(point, true)) {
             return;
         }
+        point -= m_bounds.topLeft();
+        prompt = point;
     }
 
     KisPaintDeviceSP layerImage;
@@ -215,14 +215,14 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(layerImage));
 
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
-        [segmentation = &m_segmentation, prompt, selection, options]() mutable -> KUndo2Command * {
+        [segmentation = &m_segmentation, bounds = m_bounds, prompt, selection, options]() mutable -> KUndo2Command * {
             if (!segmentation->m) {
                 return nullptr; // Early out when there was no input image to process.
             }
             try {
                 auto mask = prompt.canConvert<QPoint>() ? segmentation->m.compute_mask(convert(prompt.toPoint()))
                                                         : segmentation->m.compute_mask(convert(prompt.toRect()));
-                selection->writeBytes(mask.pixels(), QRect(0, 0, mask.extent().width, mask.extent().height));
+                selection->writeBytes(mask.pixels(), QRect(bounds.x(), bounds.y(), mask.extent().width, mask.extent().height));
                 adjustSelection(selection, options);
                 selection->invalidateOutlineCache();
             } catch (const std::exception &e) {

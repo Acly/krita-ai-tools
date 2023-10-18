@@ -54,7 +54,7 @@ public:
 
     void processImage(ImageInput const &);
 
-    void applySelectionMask(ImageInput const &, QVariant const &pointOrRect, SelectionOptions const &);
+    void applySelectionMask(ImageInput const &, QVariant pointOrRect, SelectionOptions const &);
 
     void notifyImageChanged()
     {
@@ -69,14 +69,14 @@ public Q_SLOTS:
     void reportError(QString const &);
 
 private:
-    KisPaintDeviceSP
-    mergeColorLayers(KisImageSP const &image, QList<int> const &selectedLayers, KisProcessingApplicator &applicator);
+    KisPaintDeviceSP mergeColorLayers(KisImageSP const &, QList<int> const &selectedLayers, KisProcessingApplicator &);
     KisProcessingApplicator& createApplicator(ImageInput const&);
 
     // UI thread
     QSharedPointer<SegmentationToolShared> m_shared;
     QScopedPointer<KisProcessingApplicator> m_applicator;
     ImageInput m_lastInput;
+    QRect m_bounds;
     bool m_requiresUpdate = true;
     KisPaintDeviceSP m_referencePaintDevice;
     KisMergeLabeledLayersCommand::ReferenceNodeInfoListSP m_referenceNodeList;
