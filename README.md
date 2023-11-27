@@ -22,7 +22,7 @@ The generated masks are binary masks, and typically not pixel-perfect, especiall
 
 ## Installation
 
-The current version of the plugin is built for [Krita 5.2.0](https://krita.org/en/download/krita-desktop/). Using it with other versions may lead to crashes.
+The current version of the plugin is built for [Krita 5.2.0](https://krita.org/en/download/krita-desktop/) and has been confirmed to also work for Krita 5.2.1. Using it with other versions may lead to crashes.
 
 You can download the latest version of the plugin from the [releases page](https://github.com/Acly/krita-ai-tools/releases).
 
