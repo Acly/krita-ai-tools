@@ -32,7 +32,9 @@ Download the plugin and unpack the ZIP archive into your Krita installation fold
 
 ### Linux
 
-Get the Krita AppImage from the official source and extract it. This should result in a folder `squashfs-root`. Download the plugin `tar.gz` and extract it into that folder. Then run Krita. See the commands below for some environment variables that are needed to run outside the image.
+You can use [this script](scripts/install-krita-with-segmentation.sh) to download and patch Krita with the plugin. It also creates a shortcut to run it.
+
+To do it manually, get the Krita AppImage from the official source and extract it. This should result in a folder `squashfs-root`. Download the plugin `tar.gz` and extract it into that folder. Then run Krita. See the commands below for some environment variables that are needed to run outside the image.
 
 ```sh
 ./krita-5.2.0-x86_64.appimage --appimage-extract
