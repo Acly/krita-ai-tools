@@ -42,6 +42,15 @@ tar -xf krita_segmentation_plugin-linux-x64-1.0.2.tar.gz -C squashfs-root/
 APPDIR=/squashfs-root APPIMAGE=1 ./squashfs-root/AppRun
 ```
 
+#### Arch Linux
+Arch users can use the `PKGBUILD` on [the AUR](https://aur.archlinux.org/packages/krita-ai-tools), or with `yay` or `paru`:
+
+```sh
+yay -S krita-ai-tools
+# or
+paru -S krita-ai-tools
+```
+
 ## Building
 
 The plugin has to be built as part of Krita, see [Building Krita from Source](https://docs.krita.org/en/untranslatable_pages/building_krita.html#).
