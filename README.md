@@ -22,7 +22,7 @@ The generated masks are binary masks, and typically not pixel-perfect, especiall
 
 ## Installation
 
-The current version of the plugin is built for [Krita 5.2.0](https://krita.org/en/download/krita-desktop/) and has been confirmed to also work for Krita 5.2.2. Using it with other versions may lead to crashes.
+The current version of the plugin is built for [Krita 5.2.0](https://krita.org/en/download/krita-desktop/) and has been confirmed to work for Krita up to version 5.2.6. Using it with other versions may lead to crashes.
 
 You can download the latest version of the plugin from the [releases page](https://github.com/Acly/krita-ai-tools/releases).
 
@@ -37,7 +37,7 @@ You can use [this script](scripts/install-krita-with-segmentation.sh) to downloa
 To do it manually, get the Krita AppImage from the official source and extract it. This should result in a folder `squashfs-root`. Download the plugin `tar.gz` and extract it into that folder. Then run Krita. See the commands below for some environment variables that are needed to run outside the image.
 
 ```sh
-./krita-5.2.0-x86_64.appimage --appimage-extract
+./krita-5.2.6-x86_64.appimage --appimage-extract
 tar -xf krita_segmentation_plugin-linux-x64-1.0.2.tar.gz -C squashfs-root/
 APPDIR=/squashfs-root APPIMAGE=1 ./squashfs-root/AppRun
 ```
