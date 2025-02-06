@@ -32,6 +32,11 @@ dlimg::Region convert(QRect const &rect)
     return dlimg::Region(convert(rect.topLeft()), convert(rect.bottomRight()));
 }
 
+QRect imageBounds(QPoint offset, dlimg::Extent extent)
+{
+    return QRect(offset.x(), offset.y(), extent.width, extent.height);
+}
+
 struct Image {
     QImage data;
     dlimg::ImageView view;
@@ -42,10 +47,12 @@ struct Image {
     }
 };
 
-Image prepareImage(KisPaintDevice const &device)
+Image prepareImage(KisPaintDevice const &device, QRect bounds = {})
 {
     Image result;
-    QRect bounds = device.exactBounds();
+    if (bounds.isEmpty()) {
+        bounds = device.exactBounds();
+    }
     if (bounds.isEmpty()) {
         return result; // Can happen eg. when using color label mode without matching layers.
     }
@@ -113,22 +120,15 @@ SegmentationToolHelper::SegmentationToolHelper(QSharedPointer<SegmentationToolSh
 
 void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessingApplicator &applicator)
 {
-    KisPaintDeviceSP layerImage;
-    if (!input.node || !(layerImage = input.node->projection())) {
+    KisPaintDeviceSP inputImage = selectPaintDevice(input, applicator);
+    if (!inputImage) {
         return;
     }
 
-    KisPaintDeviceSP inputImage;
-    switch (input.sampleLayersMode) {
-    case KisToolSelect::SampleAllLayers:
-        inputImage = input.image->projection();
-        break;
-    case KisToolSelect::SampleCurrentLayer:
-        inputImage = layerImage;
-        break;
-    case KisToolSelect::SampleColorLabeledLayers:
-        inputImage = mergeColorLayers(input.image, input.colorLabelsSelected, applicator);
-        break;
+    m_bounds = inputImage->exactBounds();
+
+    if (m_mode == SegmentationMode::precise) {
+        return; // No separate image processing step, everything happens in applySelectionMask.
     }
 
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
@@ -148,7 +148,6 @@ void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessing
     applicator.applyCommand(cmd, KisStrokeJobData::SEQUENTIAL, KisStrokeJobData::EXCLUSIVE);
 
     m_lastInput = input;
-    m_bounds = inputImage->exactBounds();
     m_requiresUpdate = false;
 }
 
@@ -197,8 +196,8 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
         prompt = point;
     }
 
-    KisPaintDeviceSP layerImage;
-    if (!input.node || !(layerImage = input.node->projection())) {
+    KisPaintDeviceSP inputImage;
+    if (!input.node || !(inputImage = input.node->projection())) {
         return;
     }
 
@@ -210,29 +209,50 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
                                        KisImageSignalVector(),
                                        kundo2_i18n("Select Segment"));
 
-    if (m_requiresUpdate || input != m_lastInput) {
-        processImage(input, applicator);
+    if (m_mode == SegmentationMode::fast) {
+        if (m_requiresUpdate || input != m_lastInput) {
+            processImage(input, applicator);
+        }
+    } else { // SegmentationMode::precise
+        inputImage = selectPaintDevice(input, applicator);
+        m_bounds = inputImage->exactBounds();
     }
 
-    KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(layerImage));
+    KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(inputImage));
 
-    KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
-        [segmentation = &m_segmentation, bounds = m_bounds, prompt, selection, options]() mutable -> KUndo2Command * {
-            if (!segmentation->m) {
-                return nullptr; // Early out when there was no input image to process.
-            }
-            try {
+    KUndo2Command *cmd = new KisCommandUtils::LambdaCommand([mode = m_mode,
+                                                             segmentation = &m_segmentation,
+                                                             env = &m_shared->environment(),
+                                                             inputImage,
+                                                             bounds = m_bounds,
+                                                             prompt,
+                                                             selection,
+                                                             options]() mutable -> KUndo2Command * {
+        try {
+            if (mode == SegmentationMode::fast) {
+                if (!segmentation->m) {
+                    return nullptr; // Early out when there was no input image to process.
+                }
                 auto mask = prompt.canConvert<QPoint>() ? segmentation->m.compute_mask(convert(prompt.toPoint()))
                                                         : segmentation->m.compute_mask(convert(prompt.toRect()));
-                selection->writeBytes(mask.pixels(),
-                                      QRect(bounds.x(), bounds.y(), mask.extent().width, mask.extent().height));
-                adjustSelection(selection, options);
-                selection->invalidateOutlineCache();
-            } catch (const std::exception &e) {
-                Q_EMIT segmentation->errorOccurred(QString(e.what()));
+                selection->writeBytes(mask.pixels(), imageBounds(bounds.topLeft(), mask.extent()));
+            } else {
+                QRect region = prompt.canConvert<QRect>() ? prompt.toRect() : QRect();
+                Image image = prepareImage(*inputImage, prompt.toRect());
+                if (!image) {
+                    return nullptr;
+                }
+                auto mask = dlimg::segment_objects(image.view, *env);
+                bounds.translate(prompt.toRect().topLeft());
+                selection->writeBytes(mask.pixels(), imageBounds(bounds.topLeft(), mask.extent()));
             }
-            return nullptr;
-        });
+            adjustSelection(selection, options);
+            selection->invalidateOutlineCache();
+        } catch (const std::exception &e) {
+            Q_EMIT segmentation->errorOccurred(QString(e.what()));
+        }
+        return nullptr;
+    });
     applicator.applyCommand(cmd, KisStrokeJobData::SEQUENTIAL);
 
     helper.selectPixelSelection(applicator, selection, options.action);
@@ -244,6 +264,28 @@ void SegmentationToolHelper::reportError(const QString &message)
     QMessageBox::warning(nullptr,
                          i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
                          i18n("Error during image segmentation: ") + message);
+}
+
+KisPaintDeviceSP SegmentationToolHelper::selectPaintDevice(ImageInput const &input, KisProcessingApplicator &applicator)
+{
+    KisPaintDeviceSP layerImage;
+    if (!input.node || !(layerImage = input.node->projection())) {
+        return nullptr;
+    }
+
+    KisPaintDeviceSP inputImage;
+    switch (input.sampleLayersMode) {
+    case KisToolSelect::SampleAllLayers:
+        inputImage = input.image->projection();
+        break;
+    case KisToolSelect::SampleCurrentLayer:
+        inputImage = layerImage;
+        break;
+    case KisToolSelect::SampleColorLabeledLayers:
+        inputImage = mergeColorLayers(input.image, input.colorLabelsSelected, applicator);
+        break;
+    }
+    return inputImage;
 }
 
 KisPaintDeviceSP SegmentationToolHelper::mergeColorLayers(KisImageSP const &image,
@@ -283,8 +325,26 @@ void SegmentationToolHelper::deactivate()
     m_referenceNodeList = nullptr;
 }
 
-void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget)
+void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget, bool showMode)
 {
+    if (showMode) {
+        KisOptionButtonStrip *modeSelect = new KisOptionButtonStrip;
+        m_modeFastButton = modeSelect->addButton(i18n("Fast"));
+        m_modeFastButton->setChecked(m_mode == SegmentationMode::fast);
+        m_modePreciseButton = modeSelect->addButton(i18n("Precise"));
+        m_modePreciseButton->setChecked(m_mode == SegmentationMode::precise);
+
+        KisOptionCollectionWidgetWithHeader *segmentationModeSection =
+            new KisOptionCollectionWidgetWithHeader(i18n("Mode"));
+        segmentationModeSection->setPrimaryWidget(modeSelect);
+        selectionWidget->insertWidget(2, "segmentationModeSection", segmentationModeSection);
+
+        connect(modeSelect,
+                SIGNAL(buttonToggled(KoGroupButton *, bool)),
+                this,
+                SLOT(switchMode(KoGroupButton *, bool)));
+    }
+
     KisOptionButtonStrip *backendSelect = new KisOptionButtonStrip;
     m_backendCPUButton = backendSelect->addButton(i18n("CPU"));
     m_backendCPUButton->setChecked(m_shared->backend() == dlimg::Backend::cpu);
@@ -293,9 +353,9 @@ void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget)
     m_backendGPUButton->setChecked(m_shared->backend() == dlimg::Backend::gpu);
 
     KisOptionCollectionWidgetWithHeader *segmentationBackendSection =
-        new KisOptionCollectionWidgetWithHeader(i18n("Segmentation Backend"));
+        new KisOptionCollectionWidgetWithHeader(i18n("Backend"));
     segmentationBackendSection->setPrimaryWidget(backendSelect);
-    selectionWidget->insertWidget(2, "segmentationBackendSection", segmentationBackendSection);
+    selectionWidget->insertWidget(3, "segmentationBackendSection", segmentationBackendSection);
 
     connect(backendSelect,
             SIGNAL(buttonToggled(KoGroupButton *, bool)),
@@ -322,5 +382,13 @@ void SegmentationToolHelper::switchBackend(KoGroupButton *button, bool checked)
             prev->setChecked(true);
             prev->blockSignals(blocked);
         }
+    }
+}
+
+void SegmentationToolHelper::switchMode(KoGroupButton *button, bool checked)
+{
+    if (checked) {
+        m_mode = button == m_modeFastButton ? SegmentationMode::fast : SegmentationMode::precise;
+        m_requiresUpdate = true;
     }
 }

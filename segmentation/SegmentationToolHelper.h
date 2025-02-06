@@ -50,7 +50,7 @@ public:
         bool antiAlias;
     };
 
-    void addOptions(KisSelectionOptions *);
+    void addOptions(KisSelectionOptions *, bool showMode = true);
 
     void processImage(ImageInput const &);
 
@@ -64,11 +64,13 @@ public:
     void deactivate();
 
 public Q_SLOTS:
+    void switchMode(KoGroupButton *, bool);
     void switchBackend(KoGroupButton *, bool);
     void updateBackend(dlimg::Backend);
     void reportError(QString const &);
 
 private:
+    KisPaintDeviceSP selectPaintDevice(ImageInput const& input, KisProcessingApplicator &);
     KisPaintDeviceSP mergeColorLayers(KisImageSP const &, QList<int> const &selectedLayers, KisProcessingApplicator &);
     void processImage(ImageInput const &, KisProcessingApplicator &);
 
@@ -80,6 +82,9 @@ private:
     KisPaintDeviceSP m_referencePaintDevice;
     KisMergeLabeledLayersCommand::ReferenceNodeInfoListSP m_referenceNodeList;
     int m_previousTime = 0;
+    SegmentationMode m_mode = SegmentationMode::fast;
+    KoGroupButton *m_modeFastButton = nullptr;
+    KoGroupButton *m_modePreciseButton = nullptr;
     KoGroupButton *m_backendCPUButton = nullptr;
     KoGroupButton *m_backendGPUButton = nullptr;
 

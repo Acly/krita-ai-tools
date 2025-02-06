@@ -96,7 +96,7 @@ QWidget *SelectSegmentFromPointTool::createOptionWidget()
 {
     KisToolSelectBase::createOptionWidget();
     KisSelectionOptions *selectionWidget = selectionOptionWidget();
-    m_segmentation.addOptions(selectionWidget);
+    m_segmentation.addOptions(selectionWidget, /*showMode*/ false);
     return selectionWidget;
 }
 

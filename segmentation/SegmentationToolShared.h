@@ -11,6 +11,8 @@
 #include <QObject>
 #include <QSharedPointer>
 
+enum class SegmentationMode { fast, precise };
+
 // Segmentation library, environment and config. One instance is shared between individual tools.
 class SegmentationToolShared : public QObject
 {
