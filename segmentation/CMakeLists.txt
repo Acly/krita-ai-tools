@@ -1,21 +1,38 @@
 # dlimgedit dependency
+set(dlimgedit_LOCAL OFF)
 add_library(dlimgedit_dynamic INTERFACE IMPORTED)
 
 include(FetchContent)
 if(WIN32)
-    # Download binaries pre-built with MSVC (onnxruntime does not support mingw)
-    FetchContent_Declare(dlimgedit
-        DOWNLOAD_EXTRACT_TIMESTAMP true
-        URL https://github.com/Acly/dlimgedit/releases/download/v1.0.0/dlimgedit-windows-x64-1.0.0.zip
-    )
+    if(dlimgedit_LOCAL)
+        FetchContent_Declare(dlimgedit
+            DOWNLOAD_EXTRACT_TIMESTAMP true
+            SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/dlimgedit
+        )
+    else()
+        # Download binaries pre-built with MSVC (onnxruntime does not support mingw)
+        FetchContent_Declare(dlimgedit
+            DOWNLOAD_EXTRACT_TIMESTAMP true
+            URL https://github.com/Acly/dlimgedit/releases/download/v1.1.0/dlimgedit-windows-x64-1.1.0.zip
+        )
+    endif()
     FetchContent_MakeAvailable(dlimgedit)
     set_target_properties(dlimgedit_dynamic PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${dlimgedit_SOURCE_DIR}/include)
+
+    if(NOT dlimgedit_LOCAL)
+        # Download runtime dependencies & models
+        FILE(DOWNLOAD
+            https://github.com/Acly/dlimgedit/releases/download/v1.1.0/dlimgedit-runtime-1.1.0.zip
+            ${dlimgedit_SOURCE_DIR}/dlimgedit-runtime-1.1.0.zip
+        )
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf dlimgedit-runtime-1.1.0.zip WORKING_DIRECTORY ${dlimgedit_SOURCE_DIR})
+    endif()
 else()
     # Build from source to ensure same system compatibility
     FetchContent_Declare(dlimgedit
         DOWNLOAD_EXTRACT_TIMESTAMP true
         GIT_REPOSITORY https://github.com/Acly/dlimgedit.git
-        GIT_TAG        5a6f44ac9e8c7c2156d2d55ff3f91a739b841765
+        GIT_TAG        v1.1.0
     )
     set(BUILD_SHARED_LIBS_OLD ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)
@@ -46,7 +63,12 @@ target_include_directories(kritatoolsegmentation PRIVATE ../../tools/selectionto
 target_link_libraries(kritatoolsegmentation PRIVATE kritaui kritabasicflakes kritaimage dlimgedit_dynamic $<$<PLATFORM_ID:Linux>:dl>)
 
 # Install
-set(MODELS_FILTER FILES_MATCHING PATTERN "mobile_sam_image_encoder.onnx" PATTERN "sam_mask_decoder_single.onnx")
+set(MODELS_FILTER FILES_MATCHING
+    PATTERN "mobile_sam_image_encoder.onnx"
+    PATTERN "sam_mask_decoder_single.onnx"
+    PATTERN "birefnet_cpu.onnx"
+    PATTERN "birefnet_gpu.onnx"
+)
 set(ONNX_FILTER FILES_MATCHING PATTERN "*onnxruntime.*")
 
 # Install into krita install prefix to run & test

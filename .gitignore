@@ -1,4 +1,5 @@
 .vscode
+.dev
 *.kra
 *.kra~
 *.png~

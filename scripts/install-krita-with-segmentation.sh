@@ -8,7 +8,7 @@ cd "$INSTALL_DIR"
 
 echo "Getting the latest download for Krita and Segmentation Tools"
 # Known good fallback version
-FALLBACK_VERSION="5.2.6"
+FALLBACK_VERSION="5.2.9"
 
 # Try to detect latest version from KDE's stable directory
 echo "Attempting to detect latest Krita version..."
