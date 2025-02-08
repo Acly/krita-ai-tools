@@ -22,6 +22,7 @@ hardware the operation can take several seconds. This model typically extracts
 all foreground objects in the area, rather than one specific object that is
 contained entirely in the box.
 
+![precise-mode](https://github.com/user-attachments/assets/f48e9e4e-a009-4275-b6d3-03cf1359cc08)
 
 ## Installation
 
