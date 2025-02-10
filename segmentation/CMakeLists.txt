@@ -13,7 +13,7 @@ if(WIN32)
         # Download binaries pre-built with MSVC (onnxruntime does not support mingw)
         FetchContent_Declare(dlimgedit
             DOWNLOAD_EXTRACT_TIMESTAMP true
-            URL https://github.com/Acly/dlimgedit/releases/download/v1.1.0/dlimgedit-windows-x64-1.1.0.zip
+            URL https://github.com/Acly/dlimgedit/releases/download/v1.1.0/dlimgedit-windows-x64-1.1.1.zip
         )
     endif()
     FetchContent_MakeAvailable(dlimgedit)
@@ -32,7 +32,7 @@ else()
     FetchContent_Declare(dlimgedit
         DOWNLOAD_EXTRACT_TIMESTAMP true
         GIT_REPOSITORY https://github.com/Acly/dlimgedit.git
-        GIT_TAG        v1.1.0
+        GIT_TAG        v1.1.1
     )
     set(BUILD_SHARED_LIBS_OLD ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)
