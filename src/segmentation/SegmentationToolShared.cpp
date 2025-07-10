@@ -1,15 +1,16 @@
 #include "SegmentationToolShared.h"
 
-#include "KoResourcePaths.h"
 #include "KoJsonTrader.h"
-#include <ksharedconfig.h>
+#include "KoResourcePaths.h"
 #include <klocalizedstring.h>
+#include <ksharedconfig.h>
 
 #include <QCoreApplication>
-#include <QMessageBox>
-#include <QString>
 #include <QDebug>
 #include <QDir>
+#include <QMessageBox>
+#include <QMutexLocker>
+#include <QString>
 
 #include <string>
 #ifdef Q_OS_LINUX
@@ -19,48 +20,9 @@
 namespace
 {
 
-int dummy;
-QString findLibPath()
-{
-#ifdef Q_OS_WIN32
-    return QCoreApplication::applicationDirPath();
-#else
-    // Find path of this SO (should be in the plugin directory)
-    Dl_info info{};
-    dladdr(&dummy, &info);
-    QDir dir(info.dli_fname);
-    dir.cdUp();
-    dir.cd("toolsegmentation");
-    return dir.path();
-#endif
-}
-
 QString findModelPath()
 {
     return KoResourcePaths::getApplicationRoot() + "share/krita/ai_models";
-}
-
-bool openLibrary(QLibrary &library)
-{
-#ifdef Q_OS_WIN32
-    QString locationHint = "\nLibrary not found: " + findLibPath() + "/dlimgedit.dll";
-    library.setFileName("dlimgedit");
-#else
-    QString libPath = findLibPath();
-    QString locationHint = "\nLibrary not found: " + libPath + "/libdlimgedit.so";
-    library.setFileName(libPath + "/dlimgedit");
-#endif
-    if (library.load()) {
-        using dlimgInitType = decltype(dlimg_init) *;
-        dlimgInitType dlimgInit = reinterpret_cast<dlimgInitType>(library.resolve("dlimg_init"));
-        dlimg::initialize(dlimgInit());
-        return true;
-    } else {
-        QMessageBox::warning(nullptr,
-                             i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
-                             library.errorString() + locationHint);
-        return false;
-    }
 }
 
 }
@@ -68,7 +30,7 @@ bool openLibrary(QLibrary &library)
 QSharedPointer<SegmentationToolShared> SegmentationToolShared::create()
 {
     QSharedPointer<SegmentationToolShared> result(new SegmentationToolShared());
-    if (!result->m_cpu && !result->m_gpu) {
+    if (!result->m_backend) {
         return nullptr;
     }
     return result;
@@ -76,17 +38,11 @@ QSharedPointer<SegmentationToolShared> SegmentationToolShared::create()
 
 SegmentationToolShared::SegmentationToolShared()
 {
-    if (!openLibrary(m_lib)) {
-        return;
-    }
     m_config = KSharedConfig::openConfig()->group("SegmentationToolPlugin");
     QString backendString = m_config.readEntry("backend", "cpu");
-    dlimg::Backend backend = backendString == "gpu" ? dlimg::Backend::gpu : dlimg::Backend::cpu;
-    if (backend == dlimg::Backend::gpu && !dlimg::Environment::is_supported(backend)) {
-        backend = dlimg::Backend::cpu;
-    }
+    visp::backend_type backendType = backendString == "gpu" ? visp::backend_type::gpu : visp::backend_type::cpu;
 
-    QString err = initialize(backend);
+    QString err = initialize(backendType);
     if (!err.isEmpty()) {
         QMessageBox::warning(nullptr,
                              i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
@@ -97,41 +53,71 @@ SegmentationToolShared::SegmentationToolShared()
     connect(QCoreApplication::instance(), SIGNAL(aboutToQuit()), this, SLOT(cleanUp()));
 }
 
-QString SegmentationToolShared::initialize(dlimg::Backend backend)
+QString SegmentationToolShared::initialize(visp::backend_type backendType)
 {
-    std::string modelDir = findModelPath().toStdString();
-    dlimg::Environment &env = backend == dlimg::Backend::gpu ? m_gpu : m_cpu;
-    dlimg::Options opts;
-    opts.model_directory = modelDir.c_str();
-    opts.backend = backend;
+    QMutexLocker lock(&m_mutex);
     try {
-        env = dlimg::Environment(opts);
+        m_backend = visp::backend_init(backendType);
     } catch (const std::exception &e) {
         return QString(e.what());
     }
-    m_backend = backend;
-    m_config.writeEntry("backend", backend == dlimg::Backend::gpu ? "gpu" : "cpu");
+    m_backendType = backendType;
+    m_sam = {};
+    m_birefnet = {};
+    m_config.writeEntry("backend", backendType == visp::backend_type::gpu ? "gpu" : "cpu");
     return QString();
 }
 
-dlimg::Environment const &SegmentationToolShared::environment() const
+void SegmentationToolShared::encodeImage(visp::image_view const &image)
 {
-    return m_backend == dlimg::Backend::gpu ? m_gpu : m_cpu;
+    QMutexLocker lock(&m_mutex);
+    if (!m_sam.weights) {
+        QByteArray modelPath = (findModelPath() + "/sam/MobileSAM.gguf").toUtf8();
+        m_sam = visp::sam_load_model(modelPath.data(), m_backend);
+    }
+    visp::sam_encode(m_sam, image, m_backend);
 }
 
-bool SegmentationToolShared::setBackend(dlimg::Backend backend)
+bool SegmentationToolShared::hasEncodedImage() const
 {
-    if (backend == m_backend || !m_lib.isLoaded()) {
+    return m_sam.input_image != nullptr;
+}
+
+visp::image_data SegmentationToolShared::predictMask(visp::i32x2 point)
+{
+    QMutexLocker lock(&m_mutex);
+    return visp::sam_compute(m_sam, point, m_backend);
+}
+
+visp::image_data SegmentationToolShared::predictMask(visp::image_rect box)
+{
+    QMutexLocker lock(&m_mutex);
+    return visp::sam_compute(m_sam, box, m_backend);
+}
+
+visp::image_data SegmentationToolShared::removeBackground(visp::image_view const &image)
+{
+    QMutexLocker lock(&m_mutex);
+    if (!m_birefnet.weights) {
+        QByteArray modelPath = (findModelPath() + "/birefnet/BiRefNet_lite-F16.gguf").toUtf8();
+        m_birefnet = visp::birefnet_load_model(modelPath.data(), m_backend);
+    }
+    return visp::birefnet_compute(m_birefnet, image, m_backend);
+}
+
+bool SegmentationToolShared::setBackend(visp::backend_type backendType)
+{
+    if (backendType == m_backendType) {
         return true;
     }
-    QString err = initialize(backend);
+    QString err = initialize(backendType);
     if (!err.isEmpty()) {
         QMessageBox::warning(nullptr,
-                             i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
-                             i18n("Error while trying to switch segmentation backend.\n") + err);
+                             i18nc("@title:window", "Krita - Vision ML Tools Plugin"),
+                             i18n("Error while trying to switch inference backend.\n") + err);
         return false;
     }
-    Q_EMIT backendChanged(m_backend);
+    Q_EMIT backendChanged(m_backendType);
     return true;
 }
 
@@ -140,7 +126,7 @@ void SegmentationToolShared::cleanUp()
     // This would run in the destructor anyway, but because the plugin manager which keeps this
     // object alive is static, it may happen too late and in arbitrary order. Dynamic libraries
     // which the plugin relies on may already be gone.
-    m_gpu = nullptr;
-    m_cpu = nullptr;
-    m_lib.unload();
+    m_sam = {};
+    m_birefnet = {};
+    m_backend = {};
 }

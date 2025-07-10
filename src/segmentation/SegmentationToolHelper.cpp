@@ -22,24 +22,24 @@
 namespace
 {
 
-dlimg::Point convert(QPoint const &point)
+visp::i32x2 convert(QPoint const &point)
 {
-    return dlimg::Point{point.x(), point.y()};
+    return visp::i32x2{point.x(), point.y()};
 }
 
-dlimg::Region convert(QRect const &rect)
+visp::image_rect convert(QRect const &rect)
 {
-    return dlimg::Region(convert(rect.topLeft()), convert(rect.bottomRight()));
+    return visp::image_rect{convert(rect.topLeft()), convert(rect.bottomRight())};
 }
 
-QRect imageBounds(QPoint offset, dlimg::Extent extent)
+QRect imageBounds(QPoint offset, visp::i32x2 extent)
 {
-    return QRect(offset.x(), offset.y(), extent.width, extent.height);
+    return QRect(offset.x(), offset.y(), extent[0], extent[1]);
 }
 
 struct Image {
     QImage data;
-    dlimg::ImageView view;
+    visp::image_view view;
 
     explicit operator bool() const
     {
@@ -60,17 +60,17 @@ Image prepareImage(KisPaintDevice const &device, QRect bounds = {})
     if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
         // Stored as BGRA, 8 bits per channel in Krita. No conversions for now, the segmentation network expects
         // gamma-compressed sRGB, but works fine with other color spaces (probably).
-        result.view.channels = dlimg::Channels::bgra;
+        result.view.format = visp::image_format::bgra_u8;
         result.data = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
         device.readBytes(result.data.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
     } else {
         // Convert everything else to QImage::Format_ARGB32 in default color space (sRGB).
-        result.view.channels = dlimg::Channels::argb;
+        result.view.format = visp::image_format::argb_u8;
         result.data = device.convertToQImage(nullptr, bounds);
     }
     result.view.extent = {result.data.width(), result.data.height()};
     result.view.stride = result.data.bytesPerLine();
-    result.view.pixels = result.data.bits();
+    result.view.data = result.data.bits();
     return result;
 }
 
@@ -132,12 +132,10 @@ void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessing
     }
 
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
-        [segmentation = &m_segmentation, inputImage, env = &m_shared->environment()]() mutable -> KUndo2Command * {
+        [segmentation = &m_segmentation, inputImage, shared = m_shared.get()]() mutable -> KUndo2Command * {
             try {
                 if (Image image = prepareImage(*inputImage)) {
-                    segmentation->m = dlimg::Segmentation::process(image.view, *env);
-                } else {
-                    segmentation->m = nullptr;
+                    shared->encodeImage(image.view);
                 }
             } catch (const std::exception &e) {
                 Q_EMIT segmentation->errorOccurred(QString(e.what()));
@@ -221,8 +219,8 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(inputImage));
 
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand([mode = m_mode,
+                                                             shared = m_shared.get(),
                                                              segmentation = &m_segmentation,
-                                                             env = &m_shared->environment(),
                                                              inputImage,
                                                              bounds = m_bounds,
                                                              prompt,
@@ -230,21 +228,21 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
                                                              options]() mutable -> KUndo2Command * {
         try {
             if (mode == SegmentationMode::fast) {
-                if (!segmentation->m) {
+                if (!shared->hasEncodedImage()) {
                     return nullptr; // Early out when there was no input image to process.
                 }
-                auto mask = prompt.canConvert<QPoint>() ? segmentation->m.compute_mask(convert(prompt.toPoint()))
-                                                        : segmentation->m.compute_mask(convert(prompt.toRect()));
-                selection->writeBytes(mask.pixels(), imageBounds(bounds.topLeft(), mask.extent()));
+                auto mask = prompt.canConvert<QPoint>() ? shared->predictMask(convert(prompt.toPoint()))
+                                                        : shared->predictMask(convert(prompt.toRect()));
+                selection->writeBytes(mask.data.get(), imageBounds(bounds.topLeft(), mask.extent));
             } else {
                 QRect region = prompt.canConvert<QRect>() ? prompt.toRect() : QRect();
-                Image image = prepareImage(*inputImage, prompt.toRect());
+                Image image = prepareImage(*inputImage, region);
                 if (!image) {
                     return nullptr;
                 }
-                auto mask = dlimg::segment_objects(image.view, *env);
+                auto mask = shared->removeBackground(image.view);
                 bounds.translate(prompt.toRect().topLeft());
-                selection->writeBytes(mask.pixels(), imageBounds(bounds.topLeft(), mask.extent()));
+                selection->writeBytes(mask.data.get(), imageBounds(bounds.topLeft(), mask.extent));
             }
             adjustSelection(selection, options);
             selection->invalidateOutlineCache();
@@ -347,10 +345,9 @@ void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget, bo
 
     KisOptionButtonStrip *backendSelect = new KisOptionButtonStrip;
     m_backendCPUButton = backendSelect->addButton(i18n("CPU"));
-    m_backendCPUButton->setChecked(m_shared->backend() == dlimg::Backend::cpu);
+    m_backendCPUButton->setChecked(m_shared->backend() == visp::backend_type::cpu);
     m_backendGPUButton = backendSelect->addButton(i18n("GPU"));
-    m_backendGPUButton->setEnabled(dlimg::Environment::is_supported(dlimg::Backend::gpu));
-    m_backendGPUButton->setChecked(m_shared->backend() == dlimg::Backend::gpu);
+    m_backendGPUButton->setChecked(m_shared->backend() == visp::backend_type::gpu);
 
     KisOptionCollectionWidgetWithHeader *segmentationBackendSection =
         new KisOptionCollectionWidgetWithHeader(i18n("Backend"));
@@ -361,23 +358,25 @@ void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget, bo
             SIGNAL(buttonToggled(KoGroupButton *, bool)),
             this,
             SLOT(switchBackend(KoGroupButton *, bool)));
-    connect(m_shared.get(), SIGNAL(backendChanged(dlimg::Backend)), this, SLOT(updateBackend(dlimg::Backend)));
+    connect(m_shared.get(), SIGNAL(backendChanged(visp::backend_type)), this, SLOT(updateBackend(visp::backend_type)));
 }
 
-void SegmentationToolHelper::updateBackend(dlimg::Backend backend)
+void SegmentationToolHelper::updateBackend(visp::backend_type backend)
 {
-    m_backendCPUButton->setChecked(backend == dlimg::Backend::cpu);
-    m_backendGPUButton->setChecked(backend == dlimg::Backend::gpu);
+    m_backendCPUButton->setChecked(backend == visp::backend_type::cpu);
+    m_backendGPUButton->setChecked(backend == visp::backend_type::gpu);
     m_requiresUpdate = true;
 }
 
 void SegmentationToolHelper::switchBackend(KoGroupButton *button, bool checked)
 {
     if (checked) {
-        bool success = m_shared->setBackend(button == m_backendCPUButton ? dlimg::Backend::cpu : dlimg::Backend::gpu);
+        bool success =
+            m_shared->setBackend(button == m_backendCPUButton ? visp::backend_type::cpu : visp::backend_type::gpu);
         if (!success) {
             button->setEnabled(false);
-            KoGroupButton *prev = m_shared->backend() == dlimg::Backend::cpu ? m_backendCPUButton : m_backendGPUButton;
+            KoGroupButton *prev =
+                m_shared->backend() == visp::backend_type::cpu ? m_backendCPUButton : m_backendGPUButton;
             bool blocked = prev->blockSignals(true);
             prev->setChecked(true);
             prev->blockSignals(blocked);

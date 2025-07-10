@@ -1,0 +1,23 @@
+<!--
+  SPDX-FileCopyrightText: none
+  SPDX-License-Identifier: CC0-1.0
+-->
+<RCC>
+    <qresource prefix="/">
+        <file alias="tool_segmentation_point_cursor.png">tool_segmentation_point_cursor.png</file>
+        <file alias="tool_segmentation_point_cursor_add.png">tool_segmentation_point_cursor_add.png</file>
+        <file alias="tool_segmentation_point_cursor_sub.png">tool_segmentation_point_cursor_sub.png</file>
+        <file alias="tool_segmentation_point_cursor_inter.png">tool_segmentation_point_cursor_inter.png</file>
+        <file alias="tool_segmentation_point_cursor_symdiff.png">tool_segmentation_point_cursor_symdiff.png</file>
+        <file alias="light_tool_segmentation_point.svg">light_tool_segmentation_point.svg</file>
+        <file alias="dark_tool_segmentation_point.svg">dark_tool_segmentation_point.svg</file>
+
+        <file alias="tool_segmentation_rect_cursor.png">tool_segmentation_rect_cursor.png</file>
+        <file alias="tool_segmentation_rect_cursor_add.png">tool_segmentation_rect_cursor_add.png</file>
+        <file alias="tool_segmentation_rect_cursor_sub.png">tool_segmentation_rect_cursor_sub.png</file>
+        <file alias="tool_segmentation_rect_cursor_inter.png">tool_segmentation_rect_cursor_inter.png</file>
+        <file alias="tool_segmentation_rect_cursor_symdiff.png">tool_segmentation_rect_cursor_symdiff.png</file>
+        <file alias="light_tool_segmentation_rect.svg">light_tool_segmentation_rect.svg</file>
+        <file alias="dark_tool_segmentation_rect.svg">dark_tool_segmentation_rect.svg</file>
+    </qresource>
+</RCC>
