@@ -13,9 +13,6 @@
 #include <QString>
 
 #include <string>
-#ifdef Q_OS_LINUX
-#include <dlfcn.h>
-#endif
 
 namespace
 {

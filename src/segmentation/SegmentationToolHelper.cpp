@@ -168,12 +168,28 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     if (!kisCanvas) {
         return;
     }
-    KisSelectionToolHelper helper(kisCanvas, kundo2_i18n("Segment Selection"));
 
+    KisCursorOverrideLock cursorLock(KisCursor::waitCursor());
+    KisProcessingApplicator applicator(input.image,
+                                       input.node,
+                                       KisProcessingApplicator::NO_IMAGE_UPDATES, // XXX
+                                       KisImageSignalVector(),
+                                       kundo2_i18n("Select Segment"));
+
+    KisPaintDeviceSP inputImage = selectPaintDevice(input, applicator);
+
+    if (m_mode == SegmentationMode::fast) {
+        if (m_requiresUpdate || input != m_lastInput) {
+            processImage(input, applicator);
+        }
+    } else { // SegmentationMode::precise
+        m_bounds = inputImage->exactBounds();
+    }
+
+    KisSelectionToolHelper helper(kisCanvas, kundo2_i18n("Segment Selection"));
     if (prompt.canConvert<QRect>()) {
         QRect region = prompt.toRect().intersected(m_bounds);
         region.translate(-m_bounds.topLeft());
-        prompt = region;
 
         if (helper.tryDeselectCurrentSelection(QRectF(region), options.action)) {
             return;
@@ -186,34 +202,9 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
         }
     } else if (prompt.canConvert<QPoint>()) {
         QPoint point = prompt.toPoint();
-
         if (!m_bounds.contains(point, true)) {
             return;
         }
-        point -= m_bounds.topLeft();
-        prompt = point;
-    }
-
-    KisPaintDeviceSP inputImage;
-    if (!input.node || !(inputImage = input.node->projection())) {
-        return;
-    }
-
-    KisCursorOverrideLock cursorLock(KisCursor::waitCursor());
-
-    KisProcessingApplicator applicator(input.image,
-                                       input.node,
-                                       KisProcessingApplicator::NO_IMAGE_UPDATES, // XXX
-                                       KisImageSignalVector(),
-                                       kundo2_i18n("Select Segment"));
-
-    if (m_mode == SegmentationMode::fast) {
-        if (m_requiresUpdate || input != m_lastInput) {
-            processImage(input, applicator);
-        }
-    } else { // SegmentationMode::precise
-        inputImage = selectPaintDevice(input, applicator);
-        m_bounds = inputImage->exactBounds();
     }
 
     KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(inputImage));
@@ -227,22 +218,27 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
                                                              selection,
                                                              options]() mutable -> KUndo2Command * {
         try {
+            visp::image_data mask;
             if (mode == SegmentationMode::fast) {
                 if (!shared->hasEncodedImage()) {
                     return nullptr; // Early out when there was no input image to process.
                 }
-                auto mask = prompt.canConvert<QPoint>() ? shared->predictMask(convert(prompt.toPoint()))
-                                                        : shared->predictMask(convert(prompt.toRect()));
+                if (prompt.canConvert<QPoint>()) {
+                    QPoint point = prompt.toPoint() - bounds.topLeft();
+                    mask = shared->predictMask(convert(point));
+                } else  {
+                    QRect rect = prompt.toRect().intersected(bounds).translated(-bounds.topLeft());
+                    mask = shared->predictMask(convert(rect));
+                }
                 selection->writeBytes(mask.data.get(), imageBounds(bounds.topLeft(), mask.extent));
             } else {
-                QRect region = prompt.canConvert<QRect>() ? prompt.toRect() : QRect();
-                Image image = prepareImage(*inputImage, region);
+                QRect rect = prompt.toRect().intersected(bounds);
+                Image image = prepareImage(*inputImage, rect);
                 if (!image) {
                     return nullptr;
                 }
-                auto mask = shared->removeBackground(image.view);
-                bounds.translate(prompt.toRect().topLeft());
-                selection->writeBytes(mask.data.get(), imageBounds(bounds.topLeft(), mask.extent));
+                mask = shared->removeBackground(image.view);
+                selection->writeBytes(mask.data.get(), rect);
             }
             adjustSelection(selection, options);
             selection->invalidateOutlineCache();
