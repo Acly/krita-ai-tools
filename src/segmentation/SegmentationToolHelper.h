@@ -1,7 +1,7 @@
 #ifndef SEGMENTATION_TOOL_COMMON_H_
 #define SEGMENTATION_TOOL_COMMON_H_
 
-#include "SegmentationToolShared.h"
+#include "VisionML.h"
 
 #include "commands_new/KisMergeLabeledLayersCommand.h"
 #include "kis_image.h"

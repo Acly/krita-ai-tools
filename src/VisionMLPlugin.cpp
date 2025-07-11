@@ -1,5 +1,5 @@
 #include "VisionMLPlugin.h"
-#include "segmentation/SegmentationToolShared.h"
+#include "VisionML.h"
 #include "segmentation/SelectSegmentFromPointTool.h"
 #include "segmentation/SelectSegmentFromRectTool.h"
 
