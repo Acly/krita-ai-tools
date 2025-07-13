@@ -1,5 +1,6 @@
 #include "VisionMLPlugin.h"
 #include "VisionML.h"
+#include "inpaint/InpaintTool.h"
 #include "segmentation/SelectSegmentFromPointTool.h"
 #include "segmentation/SelectSegmentFromRectTool.h"
 
@@ -14,9 +15,10 @@ K_PLUGIN_FACTORY_WITH_JSON(VisionMLPluginFactory, "kritavisionml.json", register
 VisionMLPlugin::VisionMLPlugin(QObject *parent, const QVariantList &)
     : QObject(parent)
 {
-    if (QSharedPointer<SegmentationToolShared> shared = SegmentationToolShared::create()) {
+    if (QSharedPointer<VisionModels> shared = VisionModels::create()) {
         KoToolRegistry::instance()->add(new SelectSegmentFromPointToolFactory(shared));
         KoToolRegistry::instance()->add(new SelectSegmentFromRectToolFactory(shared));
+        KoToolRegistry::instance()->add(new InpaintToolFactory(shared));
     }
 }
 

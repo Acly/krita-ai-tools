@@ -15,7 +15,7 @@
 #include <kis_image_animation_interface.h>
 
 SelectSegmentFromPointTool::SelectSegmentFromPointTool(KoCanvasBase *canvas,
-                                                       QSharedPointer<SegmentationToolShared> shared)
+                                                       QSharedPointer<VisionModels> shared)
     : KisToolSelect(canvas,
                     KisCursor::load("tool_segmentation_point_cursor.png", 6, 6),
                     i18n("Segment Selection from Point"))

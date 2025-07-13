@@ -11,7 +11,7 @@ class SelectSegmentFromPointTool : public KisToolSelect
     Q_OBJECT
 
 public:
-    explicit SelectSegmentFromPointTool(KoCanvasBase *canvas, QSharedPointer<SegmentationToolShared>);
+    explicit SelectSegmentFromPointTool(KoCanvasBase *canvas, QSharedPointer<VisionModels>);
 
     QWidget *createOptionWidget() override;
     void paint(QPainter &painter, const KoViewConverter &converter) override;
@@ -52,7 +52,7 @@ private:
 class SelectSegmentFromPointToolFactory : public KisSelectionToolFactoryBase
 {
 public:
-    SelectSegmentFromPointToolFactory(QSharedPointer<SegmentationToolShared> shared)
+    SelectSegmentFromPointToolFactory(QSharedPointer<VisionModels> shared)
         : KisSelectionToolFactoryBase("SelectSegmentFromPointTool")
         , m_shared(std::move(shared))
     {
@@ -69,7 +69,7 @@ public:
     }
 
 private:
-    QSharedPointer<SegmentationToolShared> m_shared;
+    QSharedPointer<VisionModels> m_shared;
 };
 
 #endif // SELECT_SEGMENT_FROM_POINT_TOOL_H_

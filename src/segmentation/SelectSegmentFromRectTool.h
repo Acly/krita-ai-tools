@@ -20,7 +20,7 @@ class SelectSegmentFromRectTool : public KisToolSelectBase<RectangleForSegmentat
 public:
     using Base = KisToolSelectBase<RectangleForSegmentationTool>;
 
-    explicit SelectSegmentFromRectTool(KoCanvasBase *canvas, QSharedPointer<SegmentationToolShared>);
+    explicit SelectSegmentFromRectTool(KoCanvasBase *canvas, QSharedPointer<VisionModels>);
     QWidget *createOptionWidget() override;
     void resetCursorStyle() override;
 
@@ -57,7 +57,7 @@ private:
 class SelectSegmentFromRectToolFactory : public KisSelectionToolFactoryBase
 {
 public:
-    SelectSegmentFromRectToolFactory(QSharedPointer<SegmentationToolShared> shared)
+    SelectSegmentFromRectToolFactory(QSharedPointer<VisionModels> shared)
         : KisSelectionToolFactoryBase("SelectSegmentFromRectTool")
         , m_shared(std::move(shared))
     {
@@ -74,7 +74,7 @@ public:
     }
 
 private:
-    QSharedPointer<SegmentationToolShared> m_shared;
+    QSharedPointer<VisionModels> m_shared;
 };
 
 #endif // SELECT_SEGMENT_FROM_RECT_TOOL_H_

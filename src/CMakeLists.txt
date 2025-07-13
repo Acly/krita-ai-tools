@@ -2,6 +2,7 @@
 set(kritavisionml_SOURCES
     VisionML.cpp
     VisionMLPlugin.cpp
+    inpaint/InpaintTool.cpp
     segmentation/SegmentationToolHelper.cpp
     segmentation/SelectSegmentFromPointTool.cpp
     segmentation/SelectSegmentFromRectTool.cpp

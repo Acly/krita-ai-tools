@@ -24,16 +24,16 @@ QString findModelPath()
 
 }
 
-QSharedPointer<SegmentationToolShared> SegmentationToolShared::create()
+QSharedPointer<VisionModels> VisionModels::create()
 {
-    QSharedPointer<SegmentationToolShared> result(new SegmentationToolShared());
+    QSharedPointer<VisionModels> result(new VisionModels());
     if (!result->m_backend) {
         return nullptr;
     }
     return result;
 }
 
-SegmentationToolShared::SegmentationToolShared()
+VisionModels::VisionModels()
 {
     m_config = KSharedConfig::openConfig()->group("SegmentationToolPlugin");
     QString backendString = m_config.readEntry("backend", "cpu");
@@ -50,7 +50,7 @@ SegmentationToolShared::SegmentationToolShared()
     connect(QCoreApplication::instance(), SIGNAL(aboutToQuit()), this, SLOT(cleanUp()));
 }
 
-QString SegmentationToolShared::initialize(visp::backend_type backendType)
+QString VisionModels::initialize(visp::backend_type backendType)
 {
     QMutexLocker lock(&m_mutex);
     try {
@@ -65,7 +65,7 @@ QString SegmentationToolShared::initialize(visp::backend_type backendType)
     return QString();
 }
 
-void SegmentationToolShared::encodeImage(visp::image_view const &image)
+void VisionModels::encodeSegmentationImage(visp::image_view const &image)
 {
     QMutexLocker lock(&m_mutex);
     if (!m_sam.weights) {
@@ -75,24 +75,24 @@ void SegmentationToolShared::encodeImage(visp::image_view const &image)
     visp::sam_encode(m_sam, image, m_backend);
 }
 
-bool SegmentationToolShared::hasEncodedImage() const
+bool VisionModels::hasSegmentationImage() const
 {
     return m_sam.input_image != nullptr;
 }
 
-visp::image_data SegmentationToolShared::predictMask(visp::i32x2 point)
+visp::image_data VisionModels::predictSegmentationMask(visp::i32x2 point)
 {
     QMutexLocker lock(&m_mutex);
     return visp::sam_compute(m_sam, point, m_backend);
 }
 
-visp::image_data SegmentationToolShared::predictMask(visp::image_rect box)
+visp::image_data VisionModels::predictSegmentationMask(visp::image_rect box)
 {
     QMutexLocker lock(&m_mutex);
     return visp::sam_compute(m_sam, box, m_backend);
 }
 
-visp::image_data SegmentationToolShared::removeBackground(visp::image_view const &image)
+visp::image_data VisionModels::removeBackground(visp::image_view const &image)
 {
     QMutexLocker lock(&m_mutex);
     if (!m_birefnet.weights) {
@@ -102,7 +102,17 @@ visp::image_data SegmentationToolShared::removeBackground(visp::image_view const
     return visp::birefnet_compute(m_birefnet, image, m_backend);
 }
 
-bool SegmentationToolShared::setBackend(visp::backend_type backendType)
+visp::image_data VisionModels::inpaint(visp::image_view const &image, visp::image_view const &mask)
+{
+    QMutexLocker lock(&m_mutex);
+    if (!m_migan.weights) {
+        QByteArray modelPath = (findModelPath() + "/migan/MIGAN_512_places2-F16.gguf").toUtf8();
+        m_migan = visp::migan_load_model(modelPath.data(), m_backend);
+    }
+    return visp::migan_compute(m_migan, image, mask, m_backend);
+}
+
+bool VisionModels::setBackend(visp::backend_type backendType)
 {
     if (backendType == m_backendType) {
         return true;
@@ -118,7 +128,7 @@ bool SegmentationToolShared::setBackend(visp::backend_type backendType)
     return true;
 }
 
-void SegmentationToolShared::cleanUp()
+void VisionModels::cleanUp()
 {
     // This would run in the destructor anyway, but because the plugin manager which keeps this
     // object alive is static, it may happen too late and in arbitrary order. Dynamic libraries

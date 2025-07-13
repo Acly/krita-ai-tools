@@ -31,7 +31,7 @@ class SegmentationToolHelper : QObject
 {
     Q_OBJECT
 public:
-    explicit SegmentationToolHelper(QSharedPointer<SegmentationToolShared>);
+    explicit SegmentationToolHelper(QSharedPointer<VisionModels>);
 
     struct ImageInput {
         KoCanvasBase *canvas = nullptr;
@@ -73,7 +73,7 @@ private:
     void processImage(ImageInput const &, KisProcessingApplicator &);
 
     // UI thread
-    QSharedPointer<SegmentationToolShared> m_shared;
+    QSharedPointer<VisionModels> m_shared;
     ImageInput m_lastInput;
     QRect m_bounds;
     bool m_requiresUpdate = true;

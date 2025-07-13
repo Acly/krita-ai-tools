@@ -1,5 +1,5 @@
-#ifndef SEGMENTATION_TOOL_SHARED_H_
-#define SEGMENTATION_TOOL_SHARED_H_
+#ifndef VISION_ML_H_
+#define VISION_ML_H_
 
 #include <kconfiggroup.h>
 
@@ -15,11 +15,11 @@ enum class SegmentationMode {
 };
 
 // Segmentation library, environment and config. One instance is shared between individual tools.
-class SegmentationToolShared : public QObject
+class VisionModels : public QObject
 {
     Q_OBJECT
 public:
-    static QSharedPointer<SegmentationToolShared> create();
+    static QSharedPointer<VisionModels> create();
 
     visp::backend_type backend() const
     {
@@ -28,12 +28,14 @@ public:
 
     bool setBackend(visp::backend_type backend);
 
-    void encodeImage(const visp::image_view &view);
-    bool hasEncodedImage() const;
-    visp::image_data predictMask(visp::i32x2 point);
-    visp::image_data predictMask(visp::image_rect box);
+    void encodeSegmentationImage(const visp::image_view &view);
+    bool hasSegmentationImage() const;
+    visp::image_data predictSegmentationMask(visp::i32x2 point);
+    visp::image_data predictSegmentationMask(visp::image_rect box);
 
     visp::image_data removeBackground(const visp::image_view &view);
+
+    visp::image_data inpaint(visp::image_view const &image, visp::image_view const &mask);
 
 Q_SIGNALS:
     void backendChanged(visp::backend_type);
@@ -42,7 +44,7 @@ private Q_SLOTS:
     void cleanUp();
 
 private:
-    SegmentationToolShared();
+    VisionModels();
     QString initialize(visp::backend_type);
 
     KConfigGroup m_config;
@@ -50,7 +52,8 @@ private:
     visp::backend m_backend;
     visp::sam_model m_sam;
     visp::birefnet_model m_birefnet;
+    visp::migan_model m_migan;
     QMutex m_mutex;
 };
 
-#endif // SEGMENTATION_TOOL_SHARED_H_
+#endif // VISION_ML_H_

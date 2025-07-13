@@ -108,7 +108,7 @@ bool operator!=(SegmentationToolHelper::ImageInput const &a, SegmentationToolHel
 //
 // SegmentationToolHelper
 
-SegmentationToolHelper::SegmentationToolHelper(QSharedPointer<SegmentationToolShared> shared)
+SegmentationToolHelper::SegmentationToolHelper(QSharedPointer<VisionModels> shared)
     : m_shared(std::move(shared))
 {
     connect(&m_segmentation,
@@ -135,7 +135,7 @@ void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessing
         [segmentation = &m_segmentation, inputImage, shared = m_shared.get()]() mutable -> KUndo2Command * {
             try {
                 if (Image image = prepareImage(*inputImage)) {
-                    shared->encodeImage(image.view);
+                    shared->encodeSegmentationImage(image.view);
                 }
             } catch (const std::exception &e) {
                 Q_EMIT segmentation->errorOccurred(QString(e.what()));
@@ -220,15 +220,15 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
         try {
             visp::image_data mask;
             if (mode == SegmentationMode::fast) {
-                if (!shared->hasEncodedImage()) {
+                if (!shared->hasSegmentationImage()) {
                     return nullptr; // Early out when there was no input image to process.
                 }
                 if (prompt.canConvert<QPoint>()) {
                     QPoint point = prompt.toPoint() - bounds.topLeft();
-                    mask = shared->predictMask(convert(point));
+                    mask = shared->predictSegmentationMask(convert(point));
                 } else  {
                     QRect rect = prompt.toRect().intersected(bounds).translated(-bounds.topLeft());
-                    mask = shared->predictMask(convert(rect));
+                    mask = shared->predictSegmentationMask(convert(rect));
                 }
                 selection->writeBytes(mask.data.get(), imageBounds(bounds.topLeft(), mask.extent));
             } else {
