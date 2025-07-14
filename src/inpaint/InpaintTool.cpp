@@ -28,17 +28,18 @@
 #include "kis_paint_layer.h"
 #include "kis_resources_snapshot.h"
 
-namespace {
+namespace
+{
 
 QRect padBounds(const QRect &bounds, int pad, int targetSize, const QRect &imageBounds)
 {
     QRect padded = bounds.adjusted(pad, pad, pad, pad);
-    
+
     if (padded.width() < targetSize) {
         int diff = targetSize - padded.width();
         int leftPadding = diff / 2;
         int rightPadding = diff - leftPadding;
-        
+
         if (padded.left() - leftPadding < imageBounds.left()) {
             leftPadding = padded.left() - imageBounds.left();
             rightPadding = diff - leftPadding;
@@ -48,12 +49,12 @@ QRect padBounds(const QRect &bounds, int pad, int targetSize, const QRect &image
         }
         padded.adjust(-leftPadding, 0, rightPadding, 0);
     }
-    
+
     if (padded.height() < targetSize) {
         int diff = targetSize - padded.height();
         int topPadding = diff / 2;
         int bottomPadding = diff - topPadding;
-        
+
         if (padded.top() - topPadding < imageBounds.top()) {
             topPadding = padded.top() - imageBounds.top();
             bottomPadding = diff - topPadding;
@@ -169,6 +170,7 @@ struct InpaintTool::Private {
     KisPainter maskDevPainter;
     float brushRadius = 50.; // initial default. actually read from ui.
     QWidget *optionsWidget = nullptr;
+    VisionMLModelSelect *modelSelectWidget = nullptr;
     QRectF oldOutlineRect;
     QPainterPath brushOutline;
     QSharedPointer<VisionModels> vision;
@@ -287,7 +289,8 @@ void InpaintTool::endPrimaryAction(KoPointerEvent *event)
     applicator.applyCommand(new VisionMLInpaintCommand(KisPainter::convertToAlphaAsPureAlpha(m_d->maskDev),
                                                        currentNode()->paintDevice(),
                                                        resources->activeSelection(),
-                                                       m_d->vision, m_d->errorReporter),
+                                                       m_d->vision,
+                                                       m_d->errorReporter),
                             KisStrokeJobData::BARRIER,
                             KisStrokeJobData::EXCLUSIVE);
 
@@ -380,6 +383,9 @@ QWidget *InpaintTool::createOptionWidget()
 
     QVBoxLayout *layout = new QVBoxLayout(m_d->optionsWidget);
     m_d->optionsWidget->setLayout(layout);
+
+    m_d->modelSelectWidget = new VisionMLModelSelect(m_d->vision, VisionMLTask::inpainting);
+    layout->addWidget(m_d->modelSelectWidget);
 
     VisionMLBackendWidget *backendSelect = new VisionMLBackendWidget(m_d->vision);
     layout->addWidget(backendSelect);

@@ -6,7 +6,6 @@
 #include <klocalizedstring.h>
 #include <ksharedconfig.h>
 
-
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
@@ -37,9 +36,13 @@ QSharedPointer<VisionModels> VisionModels::create()
 
 VisionModels::VisionModels()
 {
-    m_config = KSharedConfig::openConfig()->group("SegmentationToolPlugin");
+    m_config = KSharedConfig::openConfig()->group("VisionML");
     QString backendString = m_config.readEntry("backend", "cpu");
     visp::backend_type backendType = backendString == "gpu" ? visp::backend_type::gpu : visp::backend_type::cpu;
+
+    m_modelName[(int)VisionMLTask::segmentation] = m_config.readEntry("model_0", "sam/MobileSAM.gguf");
+    m_modelName[(int)VisionMLTask::inpainting] = m_config.readEntry("model_1", "migan/MIGAN_512_places2-F16.gguf");
+    m_modelName[(int)VisionMLTask::background_removal] = m_config.readEntry("model_2", "birefnet/BirefNet_lite-F16.gguf");
 
     QString err = initialize(backendType);
     if (!err.isEmpty()) {
@@ -73,8 +76,8 @@ void VisionModels::encodeSegmentationImage(visp::image_view const &image)
     QMutexLocker lock(&m_mutex);
     if (!m_sam.weights) {
         unloadModels();
-        QByteArray modelPath = (findModelPath() + "/sam/MobileSAM.gguf").toUtf8();
-        m_sam = visp::sam_load_model(modelPath.data(), m_backend);
+        QByteArray path = modelPath(VisionMLTask::segmentation);
+        m_sam = visp::sam_load_model(path.data(), m_backend);
     }
     visp::sam_encode(m_sam, image, m_backend);
 }
@@ -101,8 +104,8 @@ visp::image_data VisionModels::removeBackground(visp::image_view const &image)
     QMutexLocker lock(&m_mutex);
     if (!m_birefnet.weights) {
         unloadModels();
-        QByteArray modelPath = (findModelPath() + "/birefnet/BiRefNet_lite-F16.gguf").toUtf8();
-        m_birefnet = visp::birefnet_load_model(modelPath.data(), m_backend);
+        QByteArray path = modelPath(VisionMLTask::background_removal);
+        m_birefnet = visp::birefnet_load_model(path.data(), m_backend);
     }
     return visp::birefnet_compute(m_birefnet, image, m_backend);
 }
@@ -112,10 +115,24 @@ visp::image_data VisionModels::inpaint(visp::image_view const &image, visp::imag
     QMutexLocker lock(&m_mutex);
     if (!m_migan.weights) {
         unloadModels();
-        QByteArray modelPath = (findModelPath() + "/migan/MIGAN_512_places2-F16.gguf").toUtf8();
-        m_migan = visp::migan_load_model(modelPath.data(), m_backend);
+        QByteArray path = modelPath(VisionMLTask::inpainting);
+        m_migan = visp::migan_load_model(path.data(), m_backend);
     }
     return visp::migan_compute(m_migan, image, mask, m_backend);
+}
+
+QByteArray VisionModels::modelPath(VisionMLTask task) const
+{
+    QString path = findModelPath() + "/" + modelName(task);
+    if (!QFile::exists(path)) {
+        throw std::runtime_error("Model file not found: " + path.toStdString());
+    }
+    return path.toUtf8();
+}
+
+visp::backend_type VisionModels::backend() const
+{
+    return m_backendType;
 }
 
 bool VisionModels::setBackend(visp::backend_type backendType)
@@ -132,6 +149,23 @@ bool VisionModels::setBackend(visp::backend_type backendType)
     }
     Q_EMIT backendChanged(m_backendType);
     return true;
+}
+
+QString const &VisionModels::modelName(VisionMLTask task) const
+{
+    return m_modelName[(int)task];
+}
+
+void VisionModels::setModelName(VisionMLTask task, QString const &name)
+{
+    if (modelName(task) == name) {
+        return; // no change
+    }
+    QMutexLocker lock(&m_mutex);
+    m_modelName[(int)task] = name;
+    m_config.writeEntry(QString("model_%1").arg((int)task), name);
+    unloadModels();
+    Q_EMIT modelNameChanged(task, name);
 }
 
 void VisionModels::unloadModels()
@@ -188,6 +222,70 @@ void VisionMLBackendWidget::switchBackend(KoGroupButton *button, bool checked)
         }
     }
 }
+
+//
+// VisionMLModelSelect
+
+VisionMLModelSelect::VisionMLModelSelect(QSharedPointer<VisionModels> models, VisionMLTask task, QWidget *parent)
+    : KisOptionCollectionWidgetWithHeader(i18n("Model"), parent)
+    , m_shared(std::move(models))
+    , m_task(task)
+{
+    m_select = new QComboBox;
+    
+    auto addModels = [this](const QString &arch) {
+        QDir modelDir(findModelPath() + "/" + arch);
+        QStringList modelFiles = modelDir.entryList(QStringList() << "*.gguf", QDir::Files);
+        for (QString &file : modelFiles) {
+            QString fullName = arch + "/" + file;
+            m_select->addItem(file.replace(".gguf", ""), fullName);
+        }
+    };
+
+    switch (m_task) {
+        case VisionMLTask::segmentation:
+            addModels("sam");
+            break;
+        case VisionMLTask::background_removal:
+            addModels("birefnet");
+            break;
+        case VisionMLTask::inpainting:
+            addModels("migan");
+            break;
+        default:
+            qWarning() << "Unknown VisionMLTask" << (int)m_task;
+            return;
+    }
+
+    connect(m_select, SIGNAL(currentIndexChanged(int)), this, SLOT(switchModel(int)));
+    connect(m_shared.get(), &VisionModels::modelNameChanged, this, &VisionMLModelSelect::updateModel);
+    updateModel(m_task, m_shared->modelName(m_task));
+
+    setPrimaryWidget(m_select);
+}
+
+void VisionMLModelSelect::switchModel(int index)
+{
+    if (index < 0 || index >= m_select->count()) {
+        return;
+    }
+    QString modelName = m_select->itemData(index).toString();
+    m_shared->setModelName(m_task, modelName);
+}
+
+void VisionMLModelSelect::updateModel(VisionMLTask task, QString const &name)
+{
+    if (m_task != task) {
+        return; // not the model we are interested in
+    }
+    int index = m_select->findData(name);
+    if (index != -1) {
+        m_select->setCurrentIndex(index);
+    } else {
+        m_select->setCurrentIndex(0); // Fallback to the first model if the current one is not found
+    }
+}
+
 
 //
 // VisionMLErrorReporter
