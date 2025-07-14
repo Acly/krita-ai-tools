@@ -1,7 +1,7 @@
 {
-    "Id": "Segmentation Tools",
+    "Id": "Vision ML Tools",
     "Type": "Service",
-    "X-KDE-Library": "kritatoolsegmentation",
+    "X-KDE-Library": "kritavisionml",
     "X-KDE-ServiceTypes": [
         "Krita/Tool"
     ],

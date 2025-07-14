@@ -70,11 +70,10 @@ class InpaintToolFactory : public KisToolPaintFactoryBase
 {
 public:
     InpaintToolFactory(QSharedPointer<VisionModels> shared)
-        : KisToolPaintFactoryBase("InpaintTool")
+        : KisToolPaintFactoryBase("VisionMLInpaintTool")
         , m_shared(std::move(shared))
     {
         setToolTip(i18n("Smart Fill Tool"));
-
         setSection(ToolBoxSection::Fill);
         setIconName(koIconNameCStr("tool_inpaint"));
         setPriority(9);

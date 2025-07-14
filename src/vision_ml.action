@@ -26,4 +26,17 @@
       <statusTip></statusTip>
     </Action>
   </Actions>
+  <Actions category="tool-shortcuts">
+    <text>Tool Shortcuts</text>
+    <Action name="VisionMLInpaintTool">
+      <icon>tool_inpaint</icon>
+      <text>Smart Fill Tool</text>
+      <whatsThis></whatsThis>
+      <toolTip>Smart Fill Tool (VisionML)</toolTip>
+      <iconText>Smart Fill Tool</iconText>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+  </Actions>
 </ActionCollection>

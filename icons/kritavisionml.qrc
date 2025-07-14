@@ -19,5 +19,8 @@
         <file alias="tool_segmentation_rect_cursor_symdiff.png">tool_segmentation_rect_cursor_symdiff.png</file>
         <file alias="light_tool_segmentation_rect.svg">light_tool_segmentation_rect.svg</file>
         <file alias="dark_tool_segmentation_rect.svg">dark_tool_segmentation_rect.svg</file>
+
+        <file alias="light_tool_inpaint.svg">light_tool_inpaint.svg</file>
+        <file alias="dark_tool_inpaint.svg">dark_tool_inpaint.svg</file>
     </qresource>
 </RCC>

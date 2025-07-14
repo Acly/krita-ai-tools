@@ -29,9 +29,9 @@
 
 namespace {
 
-QRect padBounds(const QRect &bounds, int targetSize, const QRect &imageBounds)
+QRect padBounds(const QRect &bounds, int pad, int targetSize, const QRect &imageBounds)
 {
-    QRect padded = bounds;
+    QRect padded = bounds.adjusted(pad, pad, pad, pad);
     
     if (padded.width() < targetSize && imageBounds.width() >= targetSize) {
         int diff = targetSize - padded.width();
@@ -81,12 +81,15 @@ public:
     {
     }
 
+    static const int pad = 64;
+    static const int minSize = 512;
+
     KUndo2Command *paint() override
     {
         KisTransaction transaction(m_imageDev);
 
         QRect fullBounds = m_maskDev->nonDefaultPixelArea();
-        QRect bounds = padBounds(fullBounds.adjusted(8, 8, 8, 8), 512, m_imageDev->exactBounds());
+        QRect bounds = padBounds(fullBounds, pad, minSize, m_imageDev->exactBounds());
         if (bounds.isEmpty()) {
             qWarning() << "Inpaint bounds are empty, nothing to do.";
             return transaction.endAndTake();
@@ -111,16 +114,23 @@ public:
             imageView.data = imageData.bits();
         }
 
-        if (cs->pixelSize() != 1 || cs->id() != "ALPHA") {
-            throw std::runtime_error("Unsupported mask color space: " + cs->id().toStdString());
+        KoColorSpace const *maskCS = m_maskDev->colorSpace();
+        if (maskCS->pixelSize() != 1 || maskCS->id() != "ALPHA") {
+            throw std::runtime_error("Unsupported mask color space: " + maskCS->id().toStdString());
         }
 
         QImage maskData = QImage(bounds.width(), bounds.height(), QImage::Format_Alpha8);
         m_maskDev->readBytes(maskData.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
-        visp::image_view maskView({bounds.width(), bounds.height()}, visp::image_format::alpha_u8, maskData.bits());
+        visp::image_span maskView({bounds.width(), bounds.height()}, visp::image_format::alpha_u8, maskData.bits());
         maskView.stride = maskData.bytesPerLine();
 
-        visp::image_data result = m_vision->inpaint(view, maskView);
+        visp::image_data result = m_vision->inpaint(imageView, maskView);
+        visp::image_data maskF32 = visp::image_u8_to_f32(maskView, visp::image_format::alpha_f32);
+        visp::image_data maskTmp = visp::image_alloc(maskF32.extent, visp::image_format::alpha_f32);
+        visp::image_erosion(maskF32, maskTmp, 1);
+        visp::image_blur(maskTmp, maskF32, 1);
+        visp::image_f32_to_u8(maskF32, maskView);
+        visp::image_set_alpha(result, maskView);
 
         QImage resultImage(result.extent[0], result.extent[1], QImage::Format_RGBA8888);
         memcpy(resultImage.bits(), result.data.get(), n_bytes(result));
