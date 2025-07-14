@@ -87,65 +87,51 @@ public:
 
         QRect fullBounds = m_maskDev->nonDefaultPixelArea();
         QRect bounds = padBounds(fullBounds.adjusted(8, 8, 8, 8), 512, m_imageDev->exactBounds());
-        visp::image_view view;
-        QImage data;
+        if (bounds.isEmpty()) {
+            qWarning() << "Inpaint bounds are empty, nothing to do.";
+            return transaction.endAndTake();
+        }
 
-        printf("Inpaint command bounds: %d,%d %dx%d\n", bounds.x(), bounds.y(), bounds.width(), bounds.height());
-
+        visp::image_view imageView;
+        QImage imageData;
         {
             KoColorSpace const *cs = m_imageDev->colorSpace();
             if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
-                // Stored as BGRA, 8 bits per channel in Krita. No conversions for now, the segmentation network expects
-                // gamma-compressed sRGB, but works fine with other color spaces (probably).
-                view.format = visp::image_format::bgra_u8;
-                data = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
-                printf("Image data size: %dx%d, format: %d\n", data.width(), data.height(), data.format());
-                m_imageDev->readBytes(data.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
-                data.save("C:/Dev/inpaint_image.png", "PNG");
+                // Stored as BGRA, 8 bits per channel in Krita.
+                imageView.format = visp::image_format::bgra_u8;
+                imageData = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
+                m_imageDev->readBytes(imageData.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
             } else {
                 // Convert everything else to QImage::Format_ARGB32 in default color space (sRGB).
-                view.format = visp::image_format::argb_u8;
-                data = m_imageDev->convertToQImage(nullptr, bounds);
+                imageView.format = visp::image_format::argb_u8;
+                imageData = m_imageDev->convertToQImage(nullptr, bounds);
             }
-            view.extent = {data.width(), data.height()};
-            view.stride = data.bytesPerLine();
-            view.data = data.bits();
+            imageView.extent = {imageData.width(), imageData.height()};
+            imageView.stride = imageData.bytesPerLine();
+            imageView.data = imageData.bits();
         }
 
-        visp::image_view maskView;
-        QImage maskData;
-        {
-            KoColorSpace const *cs = m_maskDev->colorSpace();
-            if (cs->pixelSize() == 1 && cs->id() == "ALPHA") {
-                // Stored as 8-bit alpha in Krita.
-                maskView.format = visp::image_format::alpha_u8;
-                maskData = QImage(bounds.width(), bounds.height(), QImage::Format_Alpha8);
-                printf("Mask data size: %dx%d, format: %d\n", maskData.width(), maskData.height(), maskData.format());
-                m_maskDev->readBytes(maskData.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
-                maskData.save("C:/Dev/inpaint_mask.png", "PNG");
-            } else {
-                throw std::runtime_error("Unsupported mask color space: " + cs->id().toStdString());
-            }
-            maskView.extent = {maskData.width(), maskData.height()};
-            maskView.stride = maskData.bytesPerLine();
-            maskView.data = maskData.bits();
+        if (cs->pixelSize() != 1 || cs->id() != "ALPHA") {
+            throw std::runtime_error("Unsupported mask color space: " + cs->id().toStdString());
         }
+
+        QImage maskData = QImage(bounds.width(), bounds.height(), QImage::Format_Alpha8);
+        m_maskDev->readBytes(maskData.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        visp::image_view maskView({bounds.width(), bounds.height()}, visp::image_format::alpha_u8, maskData.bits());
+        maskView.stride = maskData.bytesPerLine();
 
         visp::image_data result = m_vision->inpaint(view, maskView);
 
-        printf("Inpaint result size: %dx%d, format: %d\n", result.extent[0], result.extent[1], static_cast<int>(result.format));
         QImage resultImage(result.extent[0], result.extent[1], QImage::Format_RGBA8888);
         memcpy(resultImage.bits(), result.data.get(), n_bytes(result));
-        
-        resultImage.save("C:/Dev/inpaint_result.png", "PNG");
-        // m_imageDev->convertFromQImage(resultImage, nullptr, bounds.x(), bounds.y());
 
         KisPaintDeviceSP comp = m_imageDev->createCompositionSourceDevice();
         comp->convertFromQImage(resultImage, nullptr, bounds.x(), bounds.y());
 
-        // KisPainter p(m_imageDev);
-        // p.setSelection(m_selection);
-        KisPainter::copyAreaOptimized(bounds.topLeft(), comp, m_imageDev, bounds, m_selection);
+        KisPainter p(m_imageDev);
+        p.setCompositeOpId(COMPOSITE_OVER);
+        p.setSelection(m_selection);
+        p.bitBlt(bounds.topLeft(), comp, bounds);
 
         return transaction.endAndTake();
     }
@@ -275,8 +261,6 @@ void InpaintTool::endPrimaryAction(KoPointerEvent *event)
                                        kundo2_i18n("Smart Patch"));
 
     // actual inpaint operation. filling in areas masked by user
-    printf("Applying inpaint command...\n");
-
     applicator.applyCommand(new VisionMLInpaintCommand(KisPainter::convertToAlphaAsPureAlpha(m_d->maskDev),
                                                        currentNode()->paintDevice(),
                                                        resources->activeSelection(),
