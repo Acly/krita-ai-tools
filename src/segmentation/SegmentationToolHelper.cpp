@@ -179,7 +179,7 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     KisPaintDeviceSP inputImage = selectPaintDevice(input, applicator);
 
     if (m_mode == SegmentationMode::fast) {
-        if (m_requiresUpdate || input != m_lastInput) {
+        if (m_requiresUpdate || !m_shared->hasSegmentationImage() || input != m_lastInput) {
             processImage(input, applicator);
         }
     } else { // SegmentationMode::precise
@@ -339,45 +339,8 @@ void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget, bo
                 SLOT(switchMode(KoGroupButton *, bool)));
     }
 
-    KisOptionButtonStrip *backendSelect = new KisOptionButtonStrip;
-    m_backendCPUButton = backendSelect->addButton(i18n("CPU"));
-    m_backendCPUButton->setChecked(m_shared->backend() == visp::backend_type::cpu);
-    m_backendGPUButton = backendSelect->addButton(i18n("GPU"));
-    m_backendGPUButton->setChecked(m_shared->backend() == visp::backend_type::gpu);
-
-    KisOptionCollectionWidgetWithHeader *segmentationBackendSection =
-        new KisOptionCollectionWidgetWithHeader(i18n("Backend"));
-    segmentationBackendSection->setPrimaryWidget(backendSelect);
-    selectionWidget->insertWidget(3, "segmentationBackendSection", segmentationBackendSection);
-
-    connect(backendSelect,
-            SIGNAL(buttonToggled(KoGroupButton *, bool)),
-            this,
-            SLOT(switchBackend(KoGroupButton *, bool)));
-    connect(m_shared.get(), SIGNAL(backendChanged(visp::backend_type)), this, SLOT(updateBackend(visp::backend_type)));
-}
-
-void SegmentationToolHelper::updateBackend(visp::backend_type backend)
-{
-    m_backendCPUButton->setChecked(backend == visp::backend_type::cpu);
-    m_backendGPUButton->setChecked(backend == visp::backend_type::gpu);
-    m_requiresUpdate = true;
-}
-
-void SegmentationToolHelper::switchBackend(KoGroupButton *button, bool checked)
-{
-    if (checked) {
-        bool success =
-            m_shared->setBackend(button == m_backendCPUButton ? visp::backend_type::cpu : visp::backend_type::gpu);
-        if (!success) {
-            button->setEnabled(false);
-            KoGroupButton *prev =
-                m_shared->backend() == visp::backend_type::cpu ? m_backendCPUButton : m_backendGPUButton;
-            bool blocked = prev->blockSignals(true);
-            prev->setChecked(true);
-            prev->blockSignals(blocked);
-        }
-    }
+    VisionMLBackendWidget *backendSelect = new VisionMLBackendWidget(m_shared);
+    selectionWidget->insertWidget(3, "segmentationBackendSection", backendSelect);
 }
 
 void SegmentationToolHelper::switchMode(KoGroupButton *button, bool checked)

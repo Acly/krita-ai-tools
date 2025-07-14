@@ -63,8 +63,6 @@ public:
 
 public Q_SLOTS:
     void switchMode(KoGroupButton *, bool);
-    void switchBackend(KoGroupButton *, bool);
-    void updateBackend(visp::backend_type);
     void reportError(QString const &);
 
 private:
@@ -83,8 +81,6 @@ private:
     SegmentationMode m_mode = SegmentationMode::fast;
     KoGroupButton *m_modeFastButton = nullptr;
     KoGroupButton *m_modePreciseButton = nullptr;
-    KoGroupButton *m_backendCPUButton = nullptr;
-    KoGroupButton *m_backendGPUButton = nullptr;
 
     // Stroke thread
     SegmentationState m_segmentation;

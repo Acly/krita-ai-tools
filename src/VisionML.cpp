@@ -2,6 +2,7 @@
 
 #include "KoJsonTrader.h"
 #include "KoResourcePaths.h"
+#include "KisOptionButtonStrip.h"
 #include <klocalizedstring.h>
 #include <ksharedconfig.h>
 
@@ -61,6 +62,7 @@ QString VisionModels::initialize(visp::backend_type backendType)
     m_backendType = backendType;
     m_sam = {};
     m_birefnet = {};
+    m_migan = {};
     m_config.writeEntry("backend", backendType == visp::backend_type::gpu ? "gpu" : "cpu");
     return QString();
 }
@@ -69,6 +71,7 @@ void VisionModels::encodeSegmentationImage(visp::image_view const &image)
 {
     QMutexLocker lock(&m_mutex);
     if (!m_sam.weights) {
+        unloadModels();
         QByteArray modelPath = (findModelPath() + "/sam/MobileSAM.gguf").toUtf8();
         m_sam = visp::sam_load_model(modelPath.data(), m_backend);
     }
@@ -96,6 +99,7 @@ visp::image_data VisionModels::removeBackground(visp::image_view const &image)
 {
     QMutexLocker lock(&m_mutex);
     if (!m_birefnet.weights) {
+        unloadModels();
         QByteArray modelPath = (findModelPath() + "/birefnet/BiRefNet_lite-F16.gguf").toUtf8();
         m_birefnet = visp::birefnet_load_model(modelPath.data(), m_backend);
     }
@@ -106,6 +110,7 @@ visp::image_data VisionModels::inpaint(visp::image_view const &image, visp::imag
 {
     QMutexLocker lock(&m_mutex);
     if (!m_migan.weights) {
+        unloadModels();
         QByteArray modelPath = (findModelPath() + "/migan/MIGAN_512_places2-F16.gguf").toUtf8();
         m_migan = visp::migan_load_model(modelPath.data(), m_backend);
     }
@@ -128,12 +133,57 @@ bool VisionModels::setBackend(visp::backend_type backendType)
     return true;
 }
 
+void VisionModels::unloadModels()
+{
+    m_sam = {};
+    m_birefnet = {};
+    m_migan = {};
+}
+
 void VisionModels::cleanUp()
 {
     // This would run in the destructor anyway, but because the plugin manager which keeps this
     // object alive is static, it may happen too late and in arbitrary order. Dynamic libraries
-    // which the plugin relies on may already be gone.
-    m_sam = {};
-    m_birefnet = {};
+    // which the plugin relies on may already be gone.    
+    unloadModels();
     m_backend = {};
+}
+
+//
+// VisionMLBackendWidget
+
+VisionMLBackendWidget::VisionMLBackendWidget(QSharedPointer<VisionModels> shared, QWidget *parent)
+    : KisOptionCollectionWidgetWithHeader(i18n("Backend"), parent)
+    , m_shared(std::move(shared))
+{
+    KisOptionButtonStrip *strip = new KisOptionButtonStrip;
+    m_cpuButton = strip->addButton(i18n("CPU"));
+    m_cpuButton->setChecked(m_shared->backend() == visp::backend_type::cpu);
+    m_gpuButton = strip->addButton(i18n("GPU"));
+    m_gpuButton->setChecked(m_shared->backend() == visp::backend_type::gpu);
+
+    setPrimaryWidget(strip);
+
+    connect(strip, SIGNAL(buttonToggled(KoGroupButton *, bool)), this, SLOT(switchBackend(KoGroupButton *, bool)));
+    connect(m_shared.get(), SIGNAL(backendChanged(visp::backend_type)), this, SLOT(updateBackend(visp::backend_type)));
+}
+
+void VisionMLBackendWidget::updateBackend(visp::backend_type backend)
+{
+    m_cpuButton->setChecked(backend == visp::backend_type::cpu);
+    m_gpuButton->setChecked(backend == visp::backend_type::gpu);
+}
+
+void VisionMLBackendWidget::switchBackend(KoGroupButton *button, bool checked)
+{
+    if (checked) {
+        bool success = m_shared->setBackend(button == m_cpuButton ? visp::backend_type::cpu : visp::backend_type::gpu);
+        if (!success) {
+            button->setEnabled(false);
+            KoGroupButton *prev = m_shared->backend() == visp::backend_type::cpu ? m_cpuButton : m_gpuButton;
+            bool blocked = prev->blockSignals(true);
+            prev->setChecked(true);
+            prev->blockSignals(blocked);
+        }
+    }
 }

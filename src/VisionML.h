@@ -2,12 +2,15 @@
 #define VISION_ML_H_
 
 #include <kconfiggroup.h>
+#include "KoGroupButton.h"
+#include "KisOptionCollectionWidget.h"
 
 #include <visp/vision.hpp>
 
 #include <QMutex>
 #include <QObject>
 #include <QSharedPointer>
+#include <QWidget>
 
 enum class SegmentationMode {
     fast,
@@ -46,6 +49,7 @@ private Q_SLOTS:
 private:
     VisionModels();
     QString initialize(visp::backend_type);
+    void unloadModels();
 
     KConfigGroup m_config;
     visp::backend_type m_backendType = visp::backend_type::cpu;
@@ -54,6 +58,24 @@ private:
     visp::birefnet_model m_birefnet;
     visp::migan_model m_migan;
     QMutex m_mutex;
+};
+
+class VisionMLBackendWidget : public KisOptionCollectionWidgetWithHeader
+{
+    Q_OBJECT
+public:
+    VisionMLBackendWidget(QSharedPointer<VisionModels> shared, QWidget *parent = nullptr);
+
+    void setBackend(visp::backend_type backend);
+
+public Q_SLOTS:
+    void switchBackend(KoGroupButton *, bool);
+    void updateBackend(visp::backend_type);
+
+private:
+    QSharedPointer<VisionModels> m_shared;
+    KoGroupButton *m_cpuButton;
+    KoGroupButton *m_gpuButton;
 };
 
 #endif // VISION_ML_H_

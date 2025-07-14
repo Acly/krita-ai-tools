@@ -3,6 +3,7 @@
 
 #include "QApplication"
 #include "QPainterPath"
+#include "QVBoxLayout"
 
 #include "kis_canvas2.h"
 #include "kis_cursor.h"
@@ -364,5 +365,12 @@ QWidget *InpaintTool::createOptionWidget()
 {
     m_d->optionsWidget = new QWidget();
     m_d->optionsWidget->setObjectName(toolId() + "option widget");
+
+    QVBoxLayout *layout = new QVBoxLayout(m_d->optionsWidget);
+    m_d->optionsWidget->setLayout(layout);
+
+    VisionMLBackendWidget *backendSelect = new VisionMLBackendWidget(m_d->vision);
+    layout->addWidget(backendSelect);
+
     return m_d->optionsWidget;
 }
