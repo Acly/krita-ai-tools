@@ -19,13 +19,6 @@
 class KisProcessingApplicator;
 class KoGroupButton;
 
-class SegmentationState : public QObject
-{
-    Q_OBJECT
-public:
-    Q_SIGNAL void errorOccurred(QString const &message);
-};
-
 // Class which implements the shared functionality for segmentation tools. Each tool has its own instance.
 class SegmentationToolHelper : QObject
 {
@@ -63,7 +56,6 @@ public:
 
 public Q_SLOTS:
     void switchMode(KoGroupButton *, bool);
-    void reportError(QString const &);
 
 private:
     KisPaintDeviceSP selectPaintDevice(ImageInput const &input, KisProcessingApplicator &);
@@ -83,7 +75,7 @@ private:
     KoGroupButton *m_modePreciseButton = nullptr;
 
     // Stroke thread
-    SegmentationState m_segmentation;
+    VisionMLErrorReporter m_errorReporter;
 };
 
 #endif // SEGMENTATION_TOOL_COMMON_H_

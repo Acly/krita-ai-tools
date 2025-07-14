@@ -1,10 +1,11 @@
 #include "VisionML.h"
 
+#include "KisOptionButtonStrip.h"
 #include "KoJsonTrader.h"
 #include "KoResourcePaths.h"
-#include "KisOptionButtonStrip.h"
 #include <klocalizedstring.h>
 #include <ksharedconfig.h>
+
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -144,7 +145,7 @@ void VisionModels::cleanUp()
 {
     // This would run in the destructor anyway, but because the plugin manager which keeps this
     // object alive is static, it may happen too late and in arbitrary order. Dynamic libraries
-    // which the plugin relies on may already be gone.    
+    // which the plugin relies on may already be gone.
     unloadModels();
     m_backend = {};
 }
@@ -186,4 +187,20 @@ void VisionMLBackendWidget::switchBackend(KoGroupButton *button, bool checked)
             prev->blockSignals(blocked);
         }
     }
+}
+
+//
+// VisionMLErrorReporter
+
+VisionMLErrorReporter::VisionMLErrorReporter(QObject *parent)
+    : QObject(parent)
+{
+    connect(this, &VisionMLErrorReporter::errorOccurred, this, &VisionMLErrorReporter::showError, Qt::QueuedConnection);
+}
+
+void VisionMLErrorReporter::showError(QString const &message)
+{
+    QMessageBox::warning(nullptr,
+                         i18nc("@title:window", "Krita - Vision ML Tools Plugin"),
+                         i18n("Error during image processing: ") + message);
 }

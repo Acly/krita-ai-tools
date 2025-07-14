@@ -78,4 +78,15 @@ private:
     KoGroupButton *m_gpuButton;
 };
 
+class VisionMLErrorReporter : public QObject
+{
+    Q_OBJECT
+public:
+    VisionMLErrorReporter(QObject *parent = nullptr);
+
+    Q_SIGNAL void errorOccurred(QString const &message);
+private Q_SLOTS:
+    void showError(QString const& message);
+};
+
 #endif // VISION_ML_H_

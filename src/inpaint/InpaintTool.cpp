@@ -34,7 +34,7 @@ QRect padBounds(const QRect &bounds, int pad, int targetSize, const QRect &image
 {
     QRect padded = bounds.adjusted(pad, pad, pad, pad);
     
-    if (padded.width() < targetSize && imageBounds.width() >= targetSize) {
+    if (padded.width() < targetSize) {
         int diff = targetSize - padded.width();
         int leftPadding = diff / 2;
         int rightPadding = diff - leftPadding;
@@ -49,7 +49,7 @@ QRect padBounds(const QRect &bounds, int pad, int targetSize, const QRect &image
         padded.adjust(-leftPadding, 0, rightPadding, 0);
     }
     
-    if (padded.height() < targetSize && imageBounds.height() >= targetSize) {
+    if (padded.height() < targetSize) {
         int diff = targetSize - padded.height();
         int topPadding = diff / 2;
         int bottomPadding = diff - topPadding;
@@ -74,11 +74,13 @@ public:
     VisionMLInpaintCommand(KisPaintDeviceSP maskDev,
                            KisPaintDeviceSP imageDev,
                            KisSelectionSP selection,
-                           QSharedPointer<VisionModels> vision)
+                           QSharedPointer<VisionModels> vision,
+                           VisionMLErrorReporter &errorReporter)
         : m_maskDev(maskDev)
         , m_imageDev(imageDev)
         , m_selection(selection)
         , m_vision(std::move(vision))
+        , m_report(errorReporter)
     {
     }
 
@@ -89,60 +91,68 @@ public:
     {
         KisTransaction transaction(m_imageDev);
 
-        QRect fullBounds = m_maskDev->nonDefaultPixelArea();
-        QRect bounds = padBounds(fullBounds, pad, minSize, m_imageDev->exactBounds());
-        if (bounds.isEmpty()) {
-            qWarning() << "Inpaint bounds are empty, nothing to do.";
-            return transaction.endAndTake();
-        }
-
-        visp::image_view imageView;
-        QImage imageData;
-        {
-            KoColorSpace const *cs = m_imageDev->colorSpace();
-            if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
-                // Stored as BGRA, 8 bits per channel in Krita.
-                imageView.format = visp::image_format::bgra_u8;
-                imageData = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
-                m_imageDev->readBytes(imageData.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
-            } else {
-                // Convert everything else to QImage::Format_ARGB32 in default color space (sRGB).
-                imageView.format = visp::image_format::argb_u8;
-                imageData = m_imageDev->convertToQImage(nullptr, bounds);
+        try {
+            QRect fullBounds = m_maskDev->nonDefaultPixelArea();
+            QRect bounds = padBounds(fullBounds, pad, minSize, m_imageDev->exactBounds());
+            if (bounds.isEmpty()) {
+                qWarning() << "Inpaint bounds are empty, nothing to do.";
+                return transaction.endAndTake();
             }
-            imageView.extent = {imageData.width(), imageData.height()};
-            imageView.stride = imageData.bytesPerLine();
-            imageView.data = imageData.bits();
+
+            visp::image_view imageView;
+            QImage imageData;
+            {
+                KoColorSpace const *cs = m_imageDev->colorSpace();
+                if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
+                    // Stored as BGRA, 8 bits per channel in Krita.
+                    imageView.format = visp::image_format::bgra_u8;
+                    imageData = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
+                    m_imageDev->readBytes(imageData.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
+                } else {
+                    // Convert everything else to QImage::Format_ARGB32 in default color space (sRGB).
+                    imageView.format = visp::image_format::argb_u8;
+                    imageData = m_imageDev->convertToQImage(nullptr, bounds);
+                }
+                imageView.extent = {imageData.width(), imageData.height()};
+                imageView.stride = imageData.bytesPerLine();
+                imageView.data = imageData.bits();
+            }
+
+            KoColorSpace const *maskCS = m_maskDev->colorSpace();
+            if (maskCS->pixelSize() != 1 || maskCS->id() != "ALPHA") {
+                throw std::runtime_error("Unsupported mask color space: " + maskCS->id().toStdString());
+            }
+
+            QImage maskData = QImage(bounds.width(), bounds.height(), QImage::Format_Alpha8);
+            m_maskDev->readBytes(maskData.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
+            visp::image_span maskView({bounds.width(), bounds.height()}, visp::image_format::alpha_u8, maskData.bits());
+            maskView.stride = maskData.bytesPerLine();
+
+            visp::image_data result = m_vision->inpaint(imageView, maskView);
+            visp::image_data maskF32 = visp::image_u8_to_f32(maskView, visp::image_format::alpha_f32);
+            visp::image_data maskTmp = visp::image_alloc(maskF32.extent, visp::image_format::alpha_f32);
+            visp::image_erosion(maskF32, maskTmp, 1);
+            visp::image_blur(maskTmp, maskF32, 1);
+            visp::image_f32_to_u8(maskF32, maskView);
+            visp::image_set_alpha(result, maskView);
+
+            QImage resultImage(result.extent[0], result.extent[1], QImage::Format_RGBA8888);
+            // copy scanlines, row stride might be different
+            size_t rowSize = result.extent[0] * n_bytes(result.format);
+            for (int i = 0; i < result.extent[1]; ++i) {
+                memcpy(resultImage.scanLine(i), result.data.get() + i * rowSize, rowSize);
+            }
+
+            KisPaintDeviceSP comp = m_imageDev->createCompositionSourceDevice();
+            comp->convertFromQImage(resultImage, nullptr, bounds.x(), bounds.y());
+
+            KisPainter p(m_imageDev);
+            p.setCompositeOpId(COMPOSITE_OVER);
+            p.setSelection(m_selection);
+            p.bitBlt(bounds.topLeft(), comp, bounds);
+        } catch (const std::exception &e) {
+            Q_EMIT m_report.errorOccurred(QString(e.what()));
         }
-
-        KoColorSpace const *maskCS = m_maskDev->colorSpace();
-        if (maskCS->pixelSize() != 1 || maskCS->id() != "ALPHA") {
-            throw std::runtime_error("Unsupported mask color space: " + maskCS->id().toStdString());
-        }
-
-        QImage maskData = QImage(bounds.width(), bounds.height(), QImage::Format_Alpha8);
-        m_maskDev->readBytes(maskData.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
-        visp::image_span maskView({bounds.width(), bounds.height()}, visp::image_format::alpha_u8, maskData.bits());
-        maskView.stride = maskData.bytesPerLine();
-
-        visp::image_data result = m_vision->inpaint(imageView, maskView);
-        visp::image_data maskF32 = visp::image_u8_to_f32(maskView, visp::image_format::alpha_f32);
-        visp::image_data maskTmp = visp::image_alloc(maskF32.extent, visp::image_format::alpha_f32);
-        visp::image_erosion(maskF32, maskTmp, 1);
-        visp::image_blur(maskTmp, maskF32, 1);
-        visp::image_f32_to_u8(maskF32, maskView);
-        visp::image_set_alpha(result, maskView);
-
-        QImage resultImage(result.extent[0], result.extent[1], QImage::Format_RGBA8888);
-        memcpy(resultImage.bits(), result.data.get(), n_bytes(result));
-
-        KisPaintDeviceSP comp = m_imageDev->createCompositionSourceDevice();
-        comp->convertFromQImage(resultImage, nullptr, bounds.x(), bounds.y());
-
-        KisPainter p(m_imageDev);
-        p.setCompositeOpId(COMPOSITE_OVER);
-        p.setSelection(m_selection);
-        p.bitBlt(bounds.topLeft(), comp, bounds);
 
         return transaction.endAndTake();
     }
@@ -151,6 +161,7 @@ private:
     KisPaintDeviceSP m_maskDev, m_imageDev;
     KisSelectionSP m_selection;
     QSharedPointer<VisionModels> m_vision;
+    VisionMLErrorReporter &m_report;
 };
 
 struct InpaintTool::Private {
@@ -161,6 +172,7 @@ struct InpaintTool::Private {
     QRectF oldOutlineRect;
     QPainterPath brushOutline;
     QSharedPointer<VisionModels> vision;
+    VisionMLErrorReporter errorReporter;
 };
 
 InpaintTool::InpaintTool(KoCanvasBase *canvas, QSharedPointer<VisionModels> vision)
@@ -275,7 +287,7 @@ void InpaintTool::endPrimaryAction(KoPointerEvent *event)
     applicator.applyCommand(new VisionMLInpaintCommand(KisPainter::convertToAlphaAsPureAlpha(m_d->maskDev),
                                                        currentNode()->paintDevice(),
                                                        resources->activeSelection(),
-                                                       m_d->vision),
+                                                       m_d->vision, m_d->errorReporter),
                             KisStrokeJobData::BARRIER,
                             KisStrokeJobData::EXCLUSIVE);
 

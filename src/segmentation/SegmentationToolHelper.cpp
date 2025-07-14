@@ -111,11 +111,6 @@ bool operator!=(SegmentationToolHelper::ImageInput const &a, SegmentationToolHel
 SegmentationToolHelper::SegmentationToolHelper(QSharedPointer<VisionModels> shared)
     : m_shared(std::move(shared))
 {
-    connect(&m_segmentation,
-            SIGNAL(errorOccurred(QString const &)),
-            this,
-            SLOT(reportError(QString const &)),
-            Qt::QueuedConnection);
 }
 
 void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessingApplicator &applicator)
@@ -132,13 +127,13 @@ void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessing
     }
 
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
-        [segmentation = &m_segmentation, inputImage, shared = m_shared.get()]() mutable -> KUndo2Command * {
+        [report = &m_errorReporter, inputImage, shared = m_shared.get()]() mutable -> KUndo2Command * {
             try {
                 if (Image image = prepareImage(*inputImage)) {
                     shared->encodeSegmentationImage(image.view);
                 }
             } catch (const std::exception &e) {
-                Q_EMIT segmentation->errorOccurred(QString(e.what()));
+                Q_EMIT report->errorOccurred(QString(e.what()));
             }
             return nullptr;
         });
@@ -211,7 +206,7 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
 
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand([mode = m_mode,
                                                              shared = m_shared.get(),
-                                                             segmentation = &m_segmentation,
+                                                             report = &m_errorReporter,
                                                              inputImage,
                                                              bounds = m_bounds,
                                                              prompt,
@@ -243,7 +238,7 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
             adjustSelection(selection, options);
             selection->invalidateOutlineCache();
         } catch (const std::exception &e) {
-            Q_EMIT segmentation->errorOccurred(QString(e.what()));
+            Q_EMIT report->errorOccurred(QString(e.what()));
         }
         return nullptr;
     });
@@ -251,13 +246,6 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
 
     helper.selectPixelSelection(applicator, selection, options.action);
     applicator.end();
-}
-
-void SegmentationToolHelper::reportError(const QString &message)
-{
-    QMessageBox::warning(nullptr,
-                         i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
-                         i18n("Error during image segmentation: ") + message);
 }
 
 KisPaintDeviceSP SegmentationToolHelper::selectPaintDevice(ImageInput const &input, KisProcessingApplicator &applicator)
