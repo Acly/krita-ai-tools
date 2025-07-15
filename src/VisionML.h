@@ -113,9 +113,9 @@ class VisionMLErrorReporter : public QObject
 public:
     VisionMLErrorReporter(QObject *parent = nullptr);
 
-    Q_SIGNAL void errorOccurred(QString const &message);
+    Q_SIGNAL void errorOccurred(QString const &message) const;
 private Q_SLOTS:
-    void showError(QString const &message);
+    void showError(QString const &message) const;
 };
 
 #endif // VISION_ML_H_

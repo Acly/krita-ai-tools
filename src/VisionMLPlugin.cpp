@@ -3,8 +3,10 @@
 #include "inpaint/InpaintTool.h"
 #include "segmentation/SelectSegmentFromPointTool.h"
 #include "segmentation/SelectSegmentFromRectTool.h"
+#include "filters/BackgroundRemovalFilter.h"
 
 #include <KoToolRegistry.h>
+#include <filter/kis_filter_registry.h>
 #include <kis_debug.h>
 #include <kis_global.h>
 #include <kis_types.h>
@@ -19,6 +21,8 @@ VisionMLPlugin::VisionMLPlugin(QObject *parent, const QVariantList &)
         KoToolRegistry::instance()->add(new SelectSegmentFromPointToolFactory(shared));
         KoToolRegistry::instance()->add(new SelectSegmentFromRectToolFactory(shared));
         KoToolRegistry::instance()->add(new InpaintToolFactory(shared));
+
+        KisFilterRegistry::instance()->add(new BackgroundRemovalFilter(shared));
     }
 }
 

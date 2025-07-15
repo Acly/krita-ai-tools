@@ -296,7 +296,7 @@ VisionMLErrorReporter::VisionMLErrorReporter(QObject *parent)
     connect(this, &VisionMLErrorReporter::errorOccurred, this, &VisionMLErrorReporter::showError, Qt::QueuedConnection);
 }
 
-void VisionMLErrorReporter::showError(QString const &message)
+void VisionMLErrorReporter::showError(QString const &message) const
 {
     QMessageBox::warning(nullptr,
                          i18nc("@title:window", "Krita - Vision ML Tools Plugin"),
