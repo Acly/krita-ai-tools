@@ -22,7 +22,7 @@ target_link_libraries(kritavisionml PRIVATE kritaui kritabasicflakes kritaimage 
 
 # Install into krita install prefix to run & test
 install(TARGETS kritavisionml DESTINATION ${KRITA_PLUGIN_INSTALL_DIR})
-install(FILES vision_ml.action DESTINATION ${DATA_INSTALL_DIR}/krita/actions)
+install(FILES vision_tools.action vision_filters.action DESTINATION ${DATA_INSTALL_DIR}/krita/actions)
 
 # Install into isolated directory to distribute just the plugin
 # if(WIN32)

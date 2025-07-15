@@ -100,24 +100,7 @@ public:
                 return transaction.endAndTake();
             }
 
-            visp::image_view imageView;
-            QImage imageData;
-            {
-                KoColorSpace const *cs = m_imageDev->colorSpace();
-                if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
-                    // Stored as BGRA, 8 bits per channel in Krita.
-                    imageView.format = visp::image_format::bgra_u8;
-                    imageData = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
-                    m_imageDev->readBytes(imageData.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
-                } else {
-                    // Convert everything else to QImage::Format_ARGB32 in default color space (sRGB).
-                    imageView.format = visp::image_format::argb_u8;
-                    imageData = m_imageDev->convertToQImage(nullptr, bounds);
-                }
-                imageView.extent = {imageData.width(), imageData.height()};
-                imageView.stride = imageData.bytesPerLine();
-                imageView.data = imageData.bits();
-            }
+            VisionMLImage image = VisionMLImage::prepare(*m_imageDev, bounds);
 
             KoColorSpace const *maskCS = m_maskDev->colorSpace();
             if (maskCS->pixelSize() != 1 || maskCS->id() != "ALPHA") {
@@ -129,7 +112,7 @@ public:
             visp::image_span maskView({bounds.width(), bounds.height()}, visp::image_format::alpha_u8, maskData.bits());
             maskView.stride = maskData.bytesPerLine();
 
-            visp::image_data result = m_vision->inpaint(imageView, maskView);
+            visp::image_data result = m_vision->inpaint(image.view, maskView);
             visp::image_data maskF32 = visp::image_u8_to_f32(maskView, visp::image_format::alpha_f32);
             visp::image_data maskTmp = visp::image_alloc(maskF32.extent, visp::image_format::alpha_f32);
             visp::image_erosion(maskF32, maskTmp, 1);

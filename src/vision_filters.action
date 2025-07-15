@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ActionCollection version="2" name="Krita">
+  <Actions category="Filters">
+    <text>Filters</text>
+    <Action name="krita_filter_background_removal">
+      <icon/>
+      <text>Background Removal...</text>
+      <whatsThis/>
+      <toolTip>Background Removal (VisionML)</toolTip>
+      <iconText>Background Removal</iconText>
+      <activationFlags>10000</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut/>
+      <isCheckable>false</isCheckable>
+      <statusTip/>
+    </Action>
+  </Actions>
+</ActionCollection>

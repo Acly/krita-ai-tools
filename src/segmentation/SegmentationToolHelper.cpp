@@ -37,43 +37,6 @@ QRect imageBounds(QPoint offset, visp::i32x2 extent)
     return QRect(offset.x(), offset.y(), extent[0], extent[1]);
 }
 
-struct Image {
-    QImage data;
-    visp::image_view view;
-
-    explicit operator bool() const
-    {
-        return !data.isNull();
-    }
-};
-
-Image prepareImage(KisPaintDevice const &device, QRect bounds = {})
-{
-    Image result;
-    if (bounds.isEmpty()) {
-        bounds = device.exactBounds();
-    }
-    if (bounds.isEmpty()) {
-        return result; // Can happen eg. when using color label mode without matching layers.
-    }
-    KoColorSpace const *cs = device.colorSpace();
-    if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
-        // Stored as BGRA, 8 bits per channel in Krita. No conversions for now, the segmentation network expects
-        // gamma-compressed sRGB, but works fine with other color spaces (probably).
-        result.view.format = visp::image_format::bgra_u8;
-        result.data = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
-        device.readBytes(result.data.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
-    } else {
-        // Convert everything else to QImage::Format_ARGB32 in default color space (sRGB).
-        result.view.format = visp::image_format::argb_u8;
-        result.data = device.convertToQImage(nullptr, bounds);
-    }
-    result.view.extent = {result.data.width(), result.data.height()};
-    result.view.stride = result.data.bytesPerLine();
-    result.view.data = result.data.bits();
-    return result;
-}
-
 void adjustSelection(KisPixelSelectionSP const &selection, SegmentationToolHelper::SelectionOptions const &o)
 {
     if (o.grow > 0) {
@@ -129,7 +92,7 @@ void SegmentationToolHelper::processImage(ImageInput const &input, KisProcessing
     KUndo2Command *cmd = new KisCommandUtils::LambdaCommand(
         [report = &m_errorReporter, inputImage, shared = m_shared.get()]() mutable -> KUndo2Command * {
             try {
-                if (Image image = prepareImage(*inputImage)) {
+                if (VisionMLImage image = VisionMLImage::prepare(*inputImage)) {
                     shared->encodeSegmentationImage(image.view);
                 }
             } catch (const std::exception &e) {
@@ -228,7 +191,7 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
                 selection->writeBytes(mask.data.get(), imageBounds(bounds.topLeft(), mask.extent));
             } else {
                 QRect rect = prompt.toRect().intersected(bounds);
-                Image image = prepareImage(*inputImage, rect);
+                VisionMLImage image = VisionMLImage::prepare(*inputImage, rect);
                 if (!image) {
                     return nullptr;
                 }

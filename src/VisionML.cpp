@@ -1,14 +1,17 @@
 #include "VisionML.h"
 
 #include "KisOptionButtonStrip.h"
+#include "KoColorSpace.h"
 #include "KoJsonTrader.h"
 #include "KoResourcePaths.h"
+#include "kis_paint_device.h"
 #include <klocalizedstring.h>
 #include <ksharedconfig.h>
 
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QHBoxLayout>
 #include <QMessageBox>
 #include <QMutexLocker>
 #include <QString>
@@ -42,7 +45,8 @@ VisionModels::VisionModels()
 
     m_modelName[(int)VisionMLTask::segmentation] = m_config.readEntry("model_0", "sam/MobileSAM.gguf");
     m_modelName[(int)VisionMLTask::inpainting] = m_config.readEntry("model_1", "migan/MIGAN_512_places2-F16.gguf");
-    m_modelName[(int)VisionMLTask::background_removal] = m_config.readEntry("model_2", "birefnet/BirefNet_lite-F16.gguf");
+    m_modelName[(int)VisionMLTask::background_removal] =
+        m_config.readEntry("model_2", "birefnet/BirefNet_lite-F16.gguf");
 
     QString err = initialize(backendType);
     if (!err.isEmpty()) {
@@ -168,6 +172,14 @@ void VisionModels::setModelName(VisionMLTask task, QString const &name)
     Q_EMIT modelNameChanged(task, name);
 }
 
+QString VisionModels::backendDeviceDescription() const
+{
+    ggml_backend_dev_t dev = ggml_backend_get_device(m_backend);
+    char const *name = ggml_backend_dev_name(dev);
+    char const *desc = ggml_backend_dev_description(dev);
+    return QString("%1 [%2]").arg(QString(desc).trimmed(), name);
+}
+
 void VisionModels::unloadModels()
 {
     m_sam = {};
@@ -185,28 +197,90 @@ void VisionModels::cleanUp()
 }
 
 //
+// VisionMLImage
+
+VisionMLImage VisionMLImage::prepare(KisPaintDevice const &device, QRect bounds)
+{
+    VisionMLImage result;
+    if (bounds.isEmpty()) {
+        bounds = device.exactBounds();
+    }
+    if (bounds.isEmpty()) {
+        return result; // Can happen eg. when using color label mode without matching layers.
+    }
+    KoColorSpace const *cs = device.colorSpace();
+    if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
+        // Stored as BGRA, 8 bits per channel in Krita. No conversions for now, the segmentation network expects
+        // gamma-compressed sRGB, but works fine with other color spaces (probably).
+        result.view.format = visp::image_format::bgra_u8;
+        result.data = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
+        device.readBytes(result.data.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
+    } else {
+        // Convert everything else to QImage::Format_ARGB32 in default color space (sRGB).
+        result.view.format = visp::image_format::argb_u8;
+        result.data = device.convertToQImage(nullptr, bounds);
+    }
+    result.view.extent = {result.data.width(), result.data.height()};
+    result.view.stride = result.data.bytesPerLine();
+    result.view.data = result.data.bits();
+    return result;
+}
+
+// Convert outputs to QImage - this is mainly because they're RGBA, but Krita paint device uses BGRA internally (but may
+// also use some other color space).
+QImage VisionMLImage::convertToQImage(visp::image_view const &img, QRect b)
+{
+    if (img.format != visp::image_format::rgba_u8) {
+        throw std::runtime_error("Unsupported image format for conversion to QImage");
+    }
+
+    QImage result(b.width(), b.height(), QImage::Format_RGBA8888);
+    // copy scanlines, row stride might be different
+    size_t rowSize = b.width() * n_bytes(img.format);
+    size_t rowStride = img.extent[0] * n_bytes(img.format);
+    for (int y = 0; y < b.height(); ++y) {
+        memcpy(result.scanLine(y), ((uint8_t const *)img.data) + (y + b.y()) * rowStride, rowSize);
+    }
+    return result;
+}
+
+//
 // VisionMLBackendWidget
 
-VisionMLBackendWidget::VisionMLBackendWidget(QSharedPointer<VisionModels> shared, QWidget *parent)
+VisionMLBackendWidget::VisionMLBackendWidget(QSharedPointer<VisionModels> shared, bool showDevice, QWidget *parent)
     : KisOptionCollectionWidgetWithHeader(i18n("Backend"), parent)
     , m_shared(std::move(shared))
 {
+    QWidget *widget = new QWidget;
+    QHBoxLayout *layout = new QHBoxLayout(widget);
+    layout->setContentsMargins(0, 0, 0, 0);
+
     KisOptionButtonStrip *strip = new KisOptionButtonStrip;
     m_cpuButton = strip->addButton(i18n("CPU"));
-    m_cpuButton->setChecked(m_shared->backend() == visp::backend_type::cpu);
     m_gpuButton = strip->addButton(i18n("GPU"));
-    m_gpuButton->setChecked(m_shared->backend() == visp::backend_type::gpu);
+    layout->addWidget(strip);
 
-    setPrimaryWidget(strip);
+    if (showDevice) {
+        m_deviceLabel = new QLabel;
+        layout->addWidget(m_deviceLabel);
+    }
+
+    setPrimaryWidget(widget);
 
     connect(strip, SIGNAL(buttonToggled(KoGroupButton *, bool)), this, SLOT(switchBackend(KoGroupButton *, bool)));
     connect(m_shared.get(), SIGNAL(backendChanged(visp::backend_type)), this, SLOT(updateBackend(visp::backend_type)));
+
+    updateBackend(m_shared->backend());
 }
 
 void VisionMLBackendWidget::updateBackend(visp::backend_type backend)
 {
     m_cpuButton->setChecked(backend == visp::backend_type::cpu);
     m_gpuButton->setChecked(backend == visp::backend_type::gpu);
+
+    if (m_deviceLabel) {
+        m_deviceLabel->setText(QString(m_shared->backendDeviceDescription()).trimmed());
+    }
 }
 
 void VisionMLBackendWidget::switchBackend(KoGroupButton *button, bool checked)
@@ -232,7 +306,7 @@ VisionMLModelSelect::VisionMLModelSelect(QSharedPointer<VisionModels> models, Vi
     , m_task(task)
 {
     m_select = new QComboBox;
-    
+
     auto addModels = [this](const QString &arch) {
         QDir modelDir(findModelPath() + "/" + arch);
         QStringList modelFiles = modelDir.entryList(QStringList() << "*.gguf", QDir::Files);
@@ -243,18 +317,18 @@ VisionMLModelSelect::VisionMLModelSelect(QSharedPointer<VisionModels> models, Vi
     };
 
     switch (m_task) {
-        case VisionMLTask::segmentation:
-            addModels("sam");
-            break;
-        case VisionMLTask::background_removal:
-            addModels("birefnet");
-            break;
-        case VisionMLTask::inpainting:
-            addModels("migan");
-            break;
-        default:
-            qWarning() << "Unknown VisionMLTask" << (int)m_task;
-            return;
+    case VisionMLTask::segmentation:
+        addModels("sam");
+        break;
+    case VisionMLTask::background_removal:
+        addModels("birefnet");
+        break;
+    case VisionMLTask::inpainting:
+        addModels("migan");
+        break;
+    default:
+        qWarning() << "Unknown VisionMLTask" << (int)m_task;
+        return;
     }
 
     connect(m_select, SIGNAL(currentIndexChanged(int)), this, SLOT(switchModel(int)));
@@ -285,7 +359,6 @@ void VisionMLModelSelect::updateModel(VisionMLTask task, QString const &name)
         m_select->setCurrentIndex(0); // Fallback to the first model if the current one is not found
     }
 }
-
 
 //
 // VisionMLErrorReporter

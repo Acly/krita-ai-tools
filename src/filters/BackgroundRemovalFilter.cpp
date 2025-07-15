@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QVBoxLayout>
+#include <QCheckBox>
 
 //
 // Configuration widget
@@ -29,13 +30,20 @@ public:
         m_modelSelectWidget = new VisionMLModelSelect(m_vision, VisionMLTask::background_removal);
         layout->addWidget(m_modelSelectWidget);
 
-        VisionMLBackendWidget *backendSelect = new VisionMLBackendWidget(m_vision);
+        VisionMLBackendWidget *backendSelect = new VisionMLBackendWidget(m_vision, true);
         layout->addWidget(backendSelect);
+
+        m_foregroundEstimationCheckBox = new QCheckBox(i18n("Estimate pixel foreground contribution"), this);
+        layout->addWidget(m_foregroundEstimationCheckBox);
 
         layout->addStretch();
 
         connect(m_vision.get(), &VisionModels::modelNameChanged, this, &BackgroundRemovalWidget::handleModelChange);
         connect(m_vision.get(), &VisionModels::backendChanged, this, &BackgroundRemovalWidget::handleBackendChange);
+        connect(m_foregroundEstimationCheckBox,
+                &QCheckBox::stateChanged,
+                this,
+                &KisConfigWidget::sigConfigurationItemChanged);
     }
 
     void setConfiguration(const KisPropertiesConfigurationSP config) override
@@ -48,6 +56,9 @@ public:
             auto backend = value.toString() == "gpu" ? visp::backend_type::gpu : visp::backend_type::cpu;
             m_vision->setBackend(backend);
         }
+        if (config->getProperty("foreground_estimation", value)) {
+            m_foregroundEstimationCheckBox->setChecked(value.toBool());
+        }
     }
 
     KisPropertiesConfigurationSP configuration() const override
@@ -56,6 +67,7 @@ public:
             new KisFilterConfiguration("background_removal", 1, KisGlobalResourcesInterface::instance());
         config->setProperty("model", m_vision->modelName(VisionMLTask::background_removal));
         config->setProperty("backend", m_vision->backend() == visp::backend_type::gpu ? "gpu" : "cpu");
+        config->setProperty("foreground_estimation", m_foregroundEstimationCheckBox->isChecked());
         return config;
     }
 
@@ -67,18 +79,21 @@ public:
     }
 
     void handleBackendChange(visp::backend_type)
-    {        
+    {
         emit sigConfigurationItemChanged();
     }
-
 
 private:
     QSharedPointer<VisionModels> m_vision;
     VisionMLModelSelect *m_modelSelectWidget = nullptr;
+    QCheckBox *m_foregroundEstimationCheckBox = nullptr;
 };
 
+//
+// BackgroundRemovalFilter implementation
+
 BackgroundRemovalFilter::BackgroundRemovalFilter(QSharedPointer<VisionModels> vision)
-    : KisFilter(id(), FiltersCategoryEnhanceId, i18n("Background Removal..."))
+    : KisFilter(id(), FiltersCategoryOtherId, i18n("Background Removal..."))
     , m_vision(vision)
 {
     setSupportsPainting(false);
@@ -98,56 +113,20 @@ KisFilterConfigurationSP BackgroundRemovalFilter::defaultConfiguration(KisResour
     KisFilterConfigurationSP config = factoryConfiguration(resourcesInterface);
     config->setProperty("model", m_vision->modelName(VisionMLTask::background_removal));
     config->setProperty("backend", m_vision->backend() == visp::backend_type::gpu ? "gpu" : "cpu");
+    config->setProperty("foreground_estimation", true);
     return config;
-}
-
-struct Image {
-    QImage data;
-    visp::image_view view;
-
-    explicit operator bool() const
-    {
-        return !data.isNull();
-    }
-};
-
-Image prepareImageBG(KisPaintDevice const &device, QRect bounds = {})
-{
-    Image result;
-    if (bounds.isEmpty()) {
-        bounds = device.exactBounds();
-    }
-    if (bounds.isEmpty()) {
-        return result; // Can happen eg. when using color label mode without matching layers.
-    }
-    KoColorSpace const *cs = device.colorSpace();
-    if (cs->pixelSize() == 4 && cs->id() == "RGBA") {
-        // Stored as BGRA, 8 bits per channel in Krita. No conversions for now, the segmentation network expects
-        // gamma-compressed sRGB, but works fine with other color spaces (probably).
-        result.view.format = visp::image_format::bgra_u8;
-        result.data = QImage(bounds.width(), bounds.height(), QImage::Format_ARGB32);
-        device.readBytes(result.data.bits(), bounds.x(), bounds.y(), bounds.width(), bounds.height());
-    } else {
-        // Convert everything else to QImage::Format_ARGB32 in default color space (sRGB).
-        result.view.format = visp::image_format::argb_u8;
-        result.data = device.convertToQImage(nullptr, bounds);
-    }
-    result.view.extent = {result.data.width(), result.data.height()};
-    result.view.stride = result.data.bytesPerLine();
-    result.view.data = result.data.bits();
-    return result;
 }
 
 void BackgroundRemovalFilter::processImpl(KisPaintDeviceSP device,
                                           const QRect &applyRect,
-                                          const KisFilterConfigurationSP,
+                                          const KisFilterConfigurationSP config,
                                           KoUpdater *progressUpdater) const
 {
     if (progressUpdater) {
         progressUpdater->setAutoNestedName(i18n("Background Removal"));
     }
 
-    Image image = prepareImageBG(*device, device->extent());
+    VisionMLImage image = VisionMLImage::prepare(*device, device->extent());
     if (!image) {
         qWarning() << "Background Removal: No image data available in the specified rectangle.";
         return;
@@ -160,27 +139,31 @@ void BackgroundRemovalFilter::processImpl(KisPaintDeviceSP device,
     if (progressUpdater)
         progressUpdater->setProgress(9);
 
+    bool estimateForeground = true;
+    if (QVariant configValue; config->getProperty("foreground_estimation", configValue)) {
+        estimateForeground = configValue.toBool();
+    }
+
     try {
         visp::image_data mask = m_vision->removeBackground(image.view);
 
         if (progressUpdater)
             progressUpdater->setProgress(90);
 
-        visp::image_data maskF32 = visp::image_u8_to_f32(mask, visp::image_format::alpha_f32);
-        visp::image_data imageF32 = visp::image_u8_to_f32(image.view, visp::image_format::rgba_f32);
-        visp::image_data fgF32 = visp::image_estimate_foreground(imageF32, maskF32);
-        visp::image_data fg = visp::image_f32_to_u8(fgF32, visp::image_format::rgba_u8);
-
+        QImage resultImage;
+        if (estimateForeground) {
+            visp::image_data maskF32 = visp::image_u8_to_f32(mask, visp::image_format::alpha_f32);
+            visp::image_data imageF32 = visp::image_u8_to_f32(image.view, visp::image_format::rgba_f32);
+            visp::image_data fgF32 = visp::image_estimate_foreground(imageF32, maskF32);
+            visp::image_data fg = visp::image_f32_to_u8(fgF32, visp::image_format::rgba_u8);
+            resultImage = VisionMLImage::convertToQImage(fg, applyRect);
+        } else {
+            visp::image_set_alpha(image.view, mask);
+            resultImage = image.data;
+        }
         if (progressUpdater)
             progressUpdater->setProgress(99);
 
-        QImage resultImage(applyRect.width(), applyRect.height(), QImage::Format_RGBA8888);
-        // copy scanlines, row stride might be different
-        size_t rowSize = applyRect.width() * n_bytes(fg.format);
-        size_t rowStride = fg.extent[0] * n_bytes(fg.format);
-        for (int i = 0; i < applyRect.height(); ++i) {
-            memcpy(resultImage.scanLine(i), fg.data.get() + (i + applyRect.y()) * rowStride, rowSize);
-        }
         device->convertFromQImage(resultImage, nullptr, applyRect.x(), applyRect.y());
 
     } catch (const std::exception &e) {

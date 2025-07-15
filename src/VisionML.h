@@ -12,6 +12,10 @@
 #include <QObject>
 #include <QSharedPointer>
 #include <QWidget>
+#include <QImage>
+#include <QLabel>
+
+class KisPaintDevice;
 
 enum class SegmentationMode {
     fast,
@@ -25,14 +29,12 @@ enum class VisionMLTask {
     _count
 };
 
-
-// Segmentation library, environment and config. One instance is shared between individual tools.
+// Vision ML library, environment and config. One instance is shared between individual tools.
 class VisionModels : public QObject
 {
     Q_OBJECT
 public:
     static QSharedPointer<VisionModels> create();
-
 
     void encodeSegmentationImage(const visp::image_view &view);
     bool hasSegmentationImage() const;
@@ -43,16 +45,16 @@ public:
 
     visp::image_data inpaint(visp::image_view const &image, visp::image_view const &mask);
 
-    
     visp::backend_type backend() const;
     bool setBackend(visp::backend_type backend);
+    QString backendDeviceDescription() const;
 
-    QString const& modelName(VisionMLTask task) const;
-    void setModelName(VisionMLTask task, QString const& name);
-    
+    QString const &modelName(VisionMLTask task) const;
+    void setModelName(VisionMLTask task, QString const &name);
+
 Q_SIGNALS:
     void backendChanged(visp::backend_type);
-    void modelNameChanged(VisionMLTask, QString const&);
+    void modelNameChanged(VisionMLTask, QString const &);
 
 private Q_SLOTS:
     void cleanUp();
@@ -73,33 +75,49 @@ private:
     QMutex m_mutex;
 };
 
+// Helper for reading images from paint device to a format compatible with vision models.
+struct VisionMLImage {
+    QImage data;
+    visp::image_span view;
+
+    explicit operator bool() const
+    {
+        return !data.isNull();
+    }
+
+    static VisionMLImage prepare(KisPaintDevice const &device, QRect bounds = {});
+
+    static QImage convertToQImage(visp::image_view const &view, QRect bounds = {});
+};
+
+// Shows a widget to switch between CPU and GPU backends. Shared across all tools.
 class VisionMLBackendWidget : public KisOptionCollectionWidgetWithHeader
 {
     Q_OBJECT
 public:
-    VisionMLBackendWidget(QSharedPointer<VisionModels> shared, QWidget *parent = nullptr);
+    VisionMLBackendWidget(QSharedPointer<VisionModels> shared, bool showDevice = false, QWidget *parent = nullptr);
 
 public Q_SLOTS:
     void switchBackend(KoGroupButton *, bool);
-    void updateBackend(visp::backend_type);
+    void updateBackend(visp::backend_type);    
 
 private:
     QSharedPointer<VisionModels> m_shared;
     KoGroupButton *m_cpuButton;
     KoGroupButton *m_gpuButton;
+    QLabel *m_deviceLabel = nullptr;
 };
 
+// Shows a drop-down list with available models. Shared across specific tasks.
 class VisionMLModelSelect : public KisOptionCollectionWidgetWithHeader
 {
     Q_OBJECT
 public:
-    VisionMLModelSelect(QSharedPointer<VisionModels> shared,
-                        VisionMLTask task,
-                        QWidget *parent = nullptr);
+    VisionMLModelSelect(QSharedPointer<VisionModels> shared, VisionMLTask task, QWidget *parent = nullptr);
 
 public Q_SLOTS:
     void switchModel(int);
-    void updateModel(VisionMLTask, QString const& name);
+    void updateModel(VisionMLTask, QString const &name);
 
 private:
     QSharedPointer<VisionModels> m_shared;
@@ -107,6 +125,7 @@ private:
     QComboBox *m_select;
 };
 
+// Helper to report errors from different threads ("stroke applicators")
 class VisionMLErrorReporter : public QObject
 {
     Q_OBJECT
