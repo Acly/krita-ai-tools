@@ -8,12 +8,14 @@
 #include <visp/vision.hpp>
 
 #include <QComboBox>
+#include <QFileSystemWatcher>
+#include <QImage>
+#include <QLabel>
 #include <QMutex>
 #include <QObject>
 #include <QSharedPointer>
 #include <QWidget>
-#include <QImage>
-#include <QLabel>
+
 
 class KisPaintDevice;
 
@@ -99,7 +101,7 @@ public:
 
 public Q_SLOTS:
     void switchBackend(KoGroupButton *, bool);
-    void updateBackend(visp::backend_type);    
+    void updateBackend(visp::backend_type);
 
 private:
     QSharedPointer<VisionModels> m_shared;
@@ -113,16 +115,22 @@ class VisionMLModelSelect : public KisOptionCollectionWidgetWithHeader
 {
     Q_OBJECT
 public:
-    VisionMLModelSelect(QSharedPointer<VisionModels> shared, VisionMLTask task, QWidget *parent = nullptr);
+    VisionMLModelSelect(QSharedPointer<VisionModels> shared,
+                        VisionMLTask task,
+                        bool showFolderButton = false,
+                        QWidget *parent = nullptr);
 
 public Q_SLOTS:
     void switchModel(int);
     void updateModel(VisionMLTask, QString const &name);
+    void openModelsFolder();
+    void updateModels();
 
 private:
     QSharedPointer<VisionModels> m_shared;
     VisionMLTask m_task;
     QComboBox *m_select;
+    QFileSystemWatcher *m_fileWatcher = nullptr;
 };
 
 // Helper to report errors from different threads ("stroke applicators")

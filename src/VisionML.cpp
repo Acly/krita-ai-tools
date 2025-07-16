@@ -4,17 +4,22 @@
 #include "KoColorSpace.h"
 #include "KoJsonTrader.h"
 #include "KoResourcePaths.h"
+#include "kis_icon_utils.h"
 #include "kis_paint_device.h"
 #include <klocalizedstring.h>
 #include <ksharedconfig.h>
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDesktopServices>
 #include <QDir>
+#include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QMutexLocker>
 #include <QString>
+#include <QToolButton>
+#include <QUrl>
 
 #include <string>
 
@@ -24,6 +29,20 @@ namespace
 QString findModelPath()
 {
     return KoResourcePaths::getApplicationRoot() + "share/krita/ai_models";
+}
+
+QString findModelPath(VisionMLTask task)
+{
+    switch (task) {
+    case VisionMLTask::segmentation:
+        return findModelPath() + "/sam";
+    case VisionMLTask::background_removal:
+        return findModelPath() + "/birefnet";
+    case VisionMLTask::inpainting:
+        return findModelPath() + "/migan";
+    default:
+        return findModelPath();
+    }
 }
 
 }
@@ -300,12 +319,47 @@ void VisionMLBackendWidget::switchBackend(KoGroupButton *button, bool checked)
 //
 // VisionMLModelSelect
 
-VisionMLModelSelect::VisionMLModelSelect(QSharedPointer<VisionModels> models, VisionMLTask task, QWidget *parent)
+VisionMLModelSelect::VisionMLModelSelect(QSharedPointer<VisionModels> models,
+                                         VisionMLTask task,
+                                         bool showFolderButton,
+                                         QWidget *parent)
     : KisOptionCollectionWidgetWithHeader(i18n("Model"), parent)
     , m_shared(std::move(models))
     , m_task(task)
 {
+    QWidget *widget = new QWidget;
+    QHBoxLayout *layout = new QHBoxLayout(widget);
+    layout->setContentsMargins(0, 0, 0, 0);
+
     m_select = new QComboBox;
+    updateModels();
+    updateModel(m_task, m_shared->modelName(m_task));
+    connect(m_select, SIGNAL(currentIndexChanged(int)), this, SLOT(switchModel(int)));
+    connect(m_shared.get(), &VisionModels::modelNameChanged, this, &VisionMLModelSelect::updateModel);
+    layout->addWidget(m_select);
+
+    if (showFolderButton) {
+        QToolButton *folderButton = new QToolButton;
+        folderButton->setIcon(KisIconUtils::loadIcon("document-open"));
+        folderButton->setFixedSize(24, 24);
+        folderButton->setToolTip(i18n("Open models folder"));
+        connect(folderButton, &QToolButton::clicked, this, &VisionMLModelSelect::openModelsFolder);
+        layout->addWidget(folderButton);
+    }
+
+    m_fileWatcher = new QFileSystemWatcher(this);
+    m_fileWatcher->addPath(findModelPath(m_task));
+    connect(m_fileWatcher, &QFileSystemWatcher::directoryChanged, this, &VisionMLModelSelect::updateModels);
+
+    setPrimaryWidget(widget);
+}
+
+void VisionMLModelSelect::updateModels()
+{
+    m_select->blockSignals(true);
+
+    QVariant current = m_select->currentData();
+    m_select->clear();
 
     auto addModels = [this](const QString &arch) {
         QDir modelDir(findModelPath() + "/" + arch);
@@ -331,11 +385,12 @@ VisionMLModelSelect::VisionMLModelSelect(QSharedPointer<VisionModels> models, Vi
         return;
     }
 
-    connect(m_select, SIGNAL(currentIndexChanged(int)), this, SLOT(switchModel(int)));
-    connect(m_shared.get(), &VisionModels::modelNameChanged, this, &VisionMLModelSelect::updateModel);
-    updateModel(m_task, m_shared->modelName(m_task));
-
-    setPrimaryWidget(m_select);
+    m_select->blockSignals(false);
+    if (current.isValid()) {
+        if (int index = m_select->findData(current); index != -1) {
+            m_select->setCurrentIndex(index);
+        }
+    }
 }
 
 void VisionMLModelSelect::switchModel(int index)
@@ -358,6 +413,11 @@ void VisionMLModelSelect::updateModel(VisionMLTask task, QString const &name)
     } else {
         m_select->setCurrentIndex(0); // Fallback to the first model if the current one is not found
     }
+}
+
+void VisionMLModelSelect::openModelsFolder()
+{
+    QDesktopServices::openUrl(QUrl::fromLocalFile(findModelPath(m_task)));
 }
 
 //

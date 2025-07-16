@@ -27,7 +27,7 @@ public:
         QLabel *label = new QLabel(i18n("Uses a neural network to separate foreground objects from background."), this);
         layout->addWidget(label);
 
-        m_modelSelectWidget = new VisionMLModelSelect(m_vision, VisionMLTask::background_removal);
+        m_modelSelectWidget = new VisionMLModelSelect(m_vision, VisionMLTask::background_removal, true);
         layout->addWidget(m_modelSelectWidget);
 
         VisionMLBackendWidget *backendSelect = new VisionMLBackendWidget(m_vision, true);
