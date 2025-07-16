@@ -3,6 +3,8 @@
 
 #include <QObject>
 #include <QVariant>
+#include <QList>
+#include <QString>
 
 class VisionMLPlugin : public QObject
 {
@@ -10,6 +12,10 @@ class VisionMLPlugin : public QObject
 public:
     VisionMLPlugin(QObject *parent, const QVariantList &);
     ~VisionMLPlugin() override;
+
+    void injectTools();
+
+    QList<QString> m_toolIds;
 };
 
 #endif // VISION_ML_PLUGIN_H_

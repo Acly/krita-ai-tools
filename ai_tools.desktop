@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=Krita/PythonPlugin
+X-KDE-Library=ai_tools
+X-Python-2-Compatible=false
+X-Krita-Manual=manual.html
+Name=AI Tools
+Comment=Tools and filters which use Vision Neural Networks
