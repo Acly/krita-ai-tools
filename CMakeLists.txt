@@ -8,6 +8,8 @@ if(NOT APPLE)
     list(APPEND ggml_targets ggml-vulkan)
 endif()
 
+set(VISP_CI ON) # deployment build
+set(VISP_FMT_LIB ON) # C++20 <format> not supported in Krita's Linux build environment
 add_subdirectory(vision.cpp)
 
 foreach(tgt ${ggml_targets})

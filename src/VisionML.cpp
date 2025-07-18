@@ -23,32 +23,62 @@
 
 #include <string>
 
+#include <ggml-backend.h>
+
 namespace
 {
 
-QString findModelPath()
+struct Paths {
+    QString plugin;
+    QString lib;
+    QString models;
+} paths;
+
+void initPaths()
 {
-    return KoResourcePaths::getApplicationRoot() + "share/krita/ai_models";
+    QString user = KoResourcePaths::getAppDataLocation();
+    paths.plugin = user + "/pykrita/ai_tools/";
+    paths.lib = paths.plugin + "lib/";
+    paths.models = paths.plugin + "models/";
+
+    if (!QDir(paths.plugin).exists()) {
+        throw std::runtime_error("Plugin directory not found (expected at " + paths.plugin.toStdString() + ")");
+    }
+}
+
+void loadGGMLBackend(char const *name)
+{
+#if defined(WIN32)
+    char const *ext = "dll";
+#elif defined(__APPLE__)
+    char const *ext = "dylib";
+#else
+    char const *ext = "so";
+#endif
+    QString path = QString("%1ggml-%2.%3").arg(paths.lib, name, ext);
+    ggml_backend_load(path.toUtf8().constData());
 }
 
 QString findModelPath(VisionMLTask task)
 {
     switch (task) {
     case VisionMLTask::segmentation:
-        return findModelPath() + "/sam";
+        return paths.models + "sam";
     case VisionMLTask::background_removal:
-        return findModelPath() + "/birefnet";
+        return paths.models + "birefnet";
     case VisionMLTask::inpainting:
-        return findModelPath() + "/migan";
+        return paths.models + "migan";
     default:
-        return findModelPath();
+        return paths.models;
     }
 }
 
-}
+} // namespace
 
 QSharedPointer<VisionModels> VisionModels::create()
 {
+    initPaths();
+
     QSharedPointer<VisionModels> result(new VisionModels());
     if (!result->m_backend) {
         return nullptr;
@@ -58,6 +88,9 @@ QSharedPointer<VisionModels> VisionModels::create()
 
 VisionModels::VisionModels()
 {
+    loadGGMLBackend("cpu");
+    loadGGMLBackend("vulkan");
+
     m_config = KSharedConfig::openConfig()->group("VisionML");
     QString backendString = m_config.readEntry("backend", "cpu");
     visp::backend_type backendType = backendString == "gpu" ? visp::backend_type::gpu : visp::backend_type::cpu;
@@ -70,8 +103,8 @@ VisionModels::VisionModels()
     QString err = initialize(backendType);
     if (!err.isEmpty()) {
         QMessageBox::warning(nullptr,
-                             i18nc("@title:window", "Krita - Segmentation Tools Plugin"),
-                             i18n("Failed to initialize segmentation tool plugin.\n") + err);
+                             i18nc("@title:window", "Krita - VisionML Plugin"),
+                             i18n("Failed to initialize AI tools plugin.\n") + err);
         return;
     }
 
@@ -146,7 +179,7 @@ visp::image_data VisionModels::inpaint(visp::image_view const &image, visp::imag
 
 QByteArray VisionModels::modelPath(VisionMLTask task) const
 {
-    QString path = findModelPath() + "/" + modelName(task);
+    QString path = paths.models + modelName(task);
     if (!QFile::exists(path)) {
         throw std::runtime_error("Model file not found: " + path.toStdString());
     }
@@ -362,7 +395,7 @@ void VisionMLModelSelect::updateModels()
     m_select->clear();
 
     auto addModels = [this](const QString &arch) {
-        QDir modelDir(findModelPath() + "/" + arch);
+        QDir modelDir(paths.models + arch);
         QStringList modelFiles = modelDir.entryList(QStringList() << "*.gguf", QDir::Files);
         for (QString &file : modelFiles) {
             QString fullName = arch + "/" + file;
