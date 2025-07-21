@@ -145,24 +145,21 @@ void SegmentationToolHelper::applySelectionMask(ImageInput const &input,
     }
 
     KisSelectionToolHelper helper(kisCanvas, kundo2_i18n("Segment Selection"));
+    bool noWork = false;
+
     if (prompt.canConvert<QRect>()) {
         QRect region = prompt.toRect().intersected(m_bounds);
         region.translate(-m_bounds.topLeft());
-
-        if (helper.tryDeselectCurrentSelection(QRectF(region), options.action)) {
-            return;
-        }
-        if (helper.canShortcutToNoop(region, options.action)) {
-            return;
-        }
-        if (!region.isValid()) {
-            return;
-        }
+        noWork |= helper.tryDeselectCurrentSelection(QRectF(region), options.action);
+        noWork |= helper.canShortcutToNoop(region, options.action);
+        noWork |= region.isEmpty();
     } else if (prompt.canConvert<QPoint>()) {
         QPoint point = prompt.toPoint();
-        if (!m_bounds.contains(point, true)) {
-            return;
-        }
+        noWork |= !m_bounds.contains(point, true);
+    }
+    if (noWork) {
+        applicator.end();
+        return;
     }
 
     KisPixelSelectionSP selection = new KisPixelSelection(new KisSelectionDefaultBounds(inputImage));

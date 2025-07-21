@@ -13,6 +13,21 @@ elif sys.platform == "darwin":
 else:
     raise RuntimeError(f"Unsupported platform: {sys.platform}")
 
+
+def _env_add_path(var: str, *paths: str | Path):
+    prev = os.environ.get(var, "")
+    if not paths:
+        return prev
+    paths = os.pathsep.join(str(p) for p in paths)
+    os.environ[var] = f"{paths}{os.pathsep}{prev}" if prev else paths
+    return prev
+
+
+def _restore_env(var: str, value: str):
+    if value:
+        os.environ[var] = value
+
+
 class VisionMLExtension(Extension):
     """Loader for Vision ML tools and filters.
 
@@ -36,7 +51,7 @@ class VisionMLExtension(Extension):
         ld_paths = []
         if platform == "linux":
             ld_paths.append(lib_dir.resolve())
-        if platform == "linux" and "APPDIR" in os.environ: # for AppImage
+        if platform == "linux" and "APPDIR" in os.environ:  # for AppImage
             ld_paths.append(Path(os.environ["APPDIR"]) / "usr" / "lib")
         ld_path = _env_add_path("LD_LIBRARY_PATH", *ld_paths)
 
@@ -69,16 +84,3 @@ class VisionMLExtension(Extension):
 
 
 Krita.instance().addExtension(VisionMLExtension(Krita.instance()))
-
-
-def _env_add_path(var: str, *paths: str | Path):
-    prev = os.environ.get(var, "")
-    if not paths:
-        return prev
-    paths = os.pathsep.join(str(p) for p in paths)
-    os.environ[var] = f"{paths}{os.pathsep}{prev}" if prev else paths
-    return prev
-
-def _restore_env(var: str, value: str):
-    if value:
-        os.environ[var] = value
