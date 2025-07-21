@@ -64,6 +64,7 @@ private Q_SLOTS:
 private:
     VisionModels();
     QString initialize(visp::backend_type);
+    void configureModel(VisionMLTask task, QString const& defaultName);
     QByteArray modelPath(VisionMLTask) const;
     void unloadModels();
 

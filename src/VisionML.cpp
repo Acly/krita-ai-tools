@@ -73,6 +73,20 @@ QString findModelPath(VisionMLTask task)
     }
 }
 
+char const* toString(VisionMLTask task)
+{
+    switch (task) {
+    case VisionMLTask::segmentation:
+        return "segmentation";
+    case VisionMLTask::inpainting:
+        return "inpainting";
+    case VisionMLTask::background_removal:
+        return "background_removal";
+    default:
+        return "unknown";
+    }
+}
+
 } // namespace
 
 QSharedPointer<VisionModels> VisionModels::create()
@@ -95,10 +109,9 @@ VisionModels::VisionModels()
     QString backendString = m_config.readEntry("backend", "cpu");
     visp::backend_type backendType = backendString == "gpu" ? visp::backend_type::gpu : visp::backend_type::cpu;
 
-    m_modelName[(int)VisionMLTask::segmentation] = m_config.readEntry("model_0", "sam/MobileSAM-F16.gguf");
-    m_modelName[(int)VisionMLTask::inpainting] = m_config.readEntry("model_1", "migan/MIGAN-512-places2-F16.gguf");
-    m_modelName[(int)VisionMLTask::background_removal] =
-        m_config.readEntry("model_2", "birefnet/BiRefNet-lite-F16.gguf");
+    configureModel(VisionMLTask::segmentation, "sam/MobileSAM-F16.gguf");
+    configureModel(VisionMLTask::inpainting, "migan/MIGAN-512-places2-F16.gguf");
+    configureModel(VisionMLTask::background_removal, "birefnet/BiRefNet-lite-F16.gguf");
 
     QString err = initialize(backendType);
     if (!err.isEmpty()) {
@@ -109,6 +122,15 @@ VisionModels::VisionModels()
     }
 
     connect(QCoreApplication::instance(), SIGNAL(aboutToQuit()), this, SLOT(cleanUp()));
+}
+
+void VisionModels::configureModel(VisionMLTask task, QString const &defaultName)
+{
+    QString modelName = m_config.readEntry(QString("model_%1").arg(toString(task)), defaultName);
+    if (!QFile::exists(paths.models + modelName)) {
+        modelName = defaultName;
+    }
+    m_modelName[(int)task] = modelName;
 }
 
 QString VisionModels::initialize(visp::backend_type backendType)
@@ -424,9 +446,7 @@ void VisionMLModelSelect::updateModels()
 
     m_select->blockSignals(false);
     if (current.isValid()) {
-        if (int index = m_select->findData(current); index != -1) {
-            m_select->setCurrentIndex(index);
-        }
+        updateModel(m_task, current.toString());
     }
 }
 
