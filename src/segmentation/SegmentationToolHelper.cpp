@@ -27,9 +27,9 @@ visp::i32x2 convert(QPoint const &point)
     return visp::i32x2{point.x(), point.y()};
 }
 
-visp::image_rect convert(QRect const &rect)
+visp::box_2d convert(QRect const &rect)
 {
-    return visp::image_rect{convert(rect.topLeft()), convert(rect.bottomRight())};
+    return visp::box_2d{convert(rect.topLeft()), convert(rect.bottomRight())};
 }
 
 QRect imageBounds(QPoint offset, visp::i32x2 extent)

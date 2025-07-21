@@ -95,10 +95,10 @@ VisionModels::VisionModels()
     QString backendString = m_config.readEntry("backend", "cpu");
     visp::backend_type backendType = backendString == "gpu" ? visp::backend_type::gpu : visp::backend_type::cpu;
 
-    m_modelName[(int)VisionMLTask::segmentation] = m_config.readEntry("model_0", "sam/MobileSAM.gguf");
-    m_modelName[(int)VisionMLTask::inpainting] = m_config.readEntry("model_1", "migan/MIGAN_512_places2-F16.gguf");
+    m_modelName[(int)VisionMLTask::segmentation] = m_config.readEntry("model_0", "sam/MobileSAM-F16.gguf");
+    m_modelName[(int)VisionMLTask::inpainting] = m_config.readEntry("model_1", "migan/MIGAN-512-places2-F16.gguf");
     m_modelName[(int)VisionMLTask::background_removal] =
-        m_config.readEntry("model_2", "birefnet/BirefNet_lite-F16.gguf");
+        m_config.readEntry("model_2", "birefnet/BiRefNet-lite-F16.gguf");
 
     QString err = initialize(backendType);
     if (!err.isEmpty()) {
@@ -135,7 +135,7 @@ void VisionModels::encodeSegmentationImage(visp::image_view const &image)
         QByteArray path = modelPath(VisionMLTask::segmentation);
         m_sam = visp::sam_load_model(path.data(), m_backend);
     }
-    visp::sam_encode(m_sam, image, m_backend);
+    visp::sam_encode(m_sam, image);
 }
 
 bool VisionModels::hasSegmentationImage() const
@@ -146,13 +146,13 @@ bool VisionModels::hasSegmentationImage() const
 visp::image_data VisionModels::predictSegmentationMask(visp::i32x2 point)
 {
     QMutexLocker lock(&m_mutex);
-    return visp::sam_compute(m_sam, point, m_backend);
+    return visp::sam_compute(m_sam, point);
 }
 
-visp::image_data VisionModels::predictSegmentationMask(visp::image_rect box)
+visp::image_data VisionModels::predictSegmentationMask(visp::box_2d box)
 {
     QMutexLocker lock(&m_mutex);
-    return visp::sam_compute(m_sam, box, m_backend);
+    return visp::sam_compute(m_sam, box);
 }
 
 visp::image_data VisionModels::removeBackground(visp::image_view const &image)
@@ -163,7 +163,7 @@ visp::image_data VisionModels::removeBackground(visp::image_view const &image)
         QByteArray path = modelPath(VisionMLTask::background_removal);
         m_birefnet = visp::birefnet_load_model(path.data(), m_backend);
     }
-    return visp::birefnet_compute(m_birefnet, image, m_backend);
+    return visp::birefnet_compute(m_birefnet, image);
 }
 
 visp::image_data VisionModels::inpaint(visp::image_view const &image, visp::image_view const &mask)
@@ -174,7 +174,7 @@ visp::image_data VisionModels::inpaint(visp::image_view const &image, visp::imag
         QByteArray path = modelPath(VisionMLTask::inpainting);
         m_migan = visp::migan_load_model(path.data(), m_backend);
     }
-    return visp::migan_compute(m_migan, image, mask, m_backend);
+    return visp::migan_compute(m_migan, image, mask);
 }
 
 QByteArray VisionModels::modelPath(VisionMLTask task) const
@@ -310,6 +310,10 @@ VisionMLBackendWidget::VisionMLBackendWidget(QSharedPointer<VisionModels> shared
     KisOptionButtonStrip *strip = new KisOptionButtonStrip;
     m_cpuButton = strip->addButton(i18n("CPU"));
     m_gpuButton = strip->addButton(i18n("GPU"));
+    if (!visp::backend_is_available(visp::backend_type::gpu)) {
+        m_gpuButton->setEnabled(false);
+        m_gpuButton->setToolTip(i18n("GPU backend not available, no supported devices found"));
+    }
     layout->addWidget(strip);
 
     if (showDevice) {

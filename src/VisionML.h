@@ -41,7 +41,7 @@ public:
     void encodeSegmentationImage(const visp::image_view &view);
     bool hasSegmentationImage() const;
     visp::image_data predictSegmentationMask(visp::i32x2 point);
-    visp::image_data predictSegmentationMask(visp::image_rect box);
+    visp::image_data predictSegmentationMask(visp::box_2d box);
 
     visp::image_data removeBackground(const visp::image_view &view);
 
@@ -69,7 +69,7 @@ private:
 
     KConfigGroup m_config;
     visp::backend_type m_backendType = visp::backend_type::cpu;
-    visp::backend m_backend;
+    visp::backend_device m_backend;
     visp::sam_model m_sam;
     visp::birefnet_model m_birefnet;
     visp::migan_model m_migan;
