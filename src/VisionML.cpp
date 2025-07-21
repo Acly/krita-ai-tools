@@ -28,6 +28,12 @@
 namespace
 {
 
+void handleGGMLFatalError(const char *error_message)
+{
+    qCritical() << "[GGML] Fatal error:" << error_message;
+    throw visp::exception(error_message);
+}
+
 struct Paths {
     QString plugin;
     QString lib;
@@ -102,6 +108,8 @@ QSharedPointer<VisionModels> VisionModels::create()
 
 VisionModels::VisionModels()
 {
+    ggml_set_abort_callback(handleGGMLFatalError);
+
     loadGGMLBackend("cpu");
     loadGGMLBackend("vulkan");
 
