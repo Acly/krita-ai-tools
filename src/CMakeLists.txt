@@ -1,4 +1,3 @@
-
 set(kritavisionml_SOURCES
     VisionML.cpp
     VisionMLPlugin.cpp
@@ -19,3 +18,8 @@ generate_export_header(kritavisionml BASE_NAME kritavisionml)
 target_include_directories(kritavisionml PRIVATE . ../../tools/selectiontools)
 target_compile_features(kritavisionml PRIVATE cxx_std_20)
 target_link_libraries(kritavisionml PRIVATE kritaui kritabasicflakes kritaimage visioncpp)
+
+set_target_properties(kritavisionml PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "$ORIGIN"
+)
