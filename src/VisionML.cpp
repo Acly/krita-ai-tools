@@ -315,13 +315,17 @@ QImage VisionMLImage::convertToQImage(visp::image_view const &img, QRect b)
     if (img.format != visp::image_format::rgba_u8) {
         throw std::runtime_error("Unsupported image format for conversion to QImage");
     }
+    if (b.isEmpty()) {
+        b = QRect(0, 0, img.extent[0], img.extent[1]);
+    }
 
     QImage result(b.width(), b.height(), QImage::Format_RGBA8888);
     // copy scanlines, row stride might be different
     size_t rowSize = b.width() * n_bytes(img.format);
     size_t rowStride = img.extent[0] * n_bytes(img.format);
+    size_t rowOffset = b.x() * n_bytes(img.format);
     for (int y = 0; y < b.height(); ++y) {
-        memcpy(result.scanLine(y), ((uint8_t const *)img.data) + (y + b.y()) * rowStride, rowSize);
+        memcpy(result.scanLine(y), ((uint8_t const *)img.data) + (y + b.y()) * rowStride + rowOffset, rowSize);
     }
     return result;
 }

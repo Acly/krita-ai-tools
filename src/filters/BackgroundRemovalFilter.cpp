@@ -126,7 +126,7 @@ void BackgroundRemovalFilter::processImpl(KisPaintDeviceSP device,
         progressUpdater->setAutoNestedName(i18n("Background Removal"));
     }
 
-    VisionMLImage image = VisionMLImage::prepare(*device, device->extent());
+    VisionMLImage image = VisionMLImage::prepare(*device, applyRect);
     if (!image) {
         qWarning() << "Background Removal: No image data available in the specified rectangle.";
         return;
@@ -156,7 +156,7 @@ void BackgroundRemovalFilter::processImpl(KisPaintDeviceSP device,
             visp::image_data imageF32 = visp::image_u8_to_f32(image.view, visp::image_format::rgba_f32);
             visp::image_data fgF32 = visp::image_estimate_foreground(imageF32, maskF32);
             visp::image_data fg = visp::image_f32_to_u8(fgF32, visp::image_format::rgba_u8);
-            resultImage = VisionMLImage::convertToQImage(fg, applyRect);
+            resultImage = VisionMLImage::convertToQImage(fg);
         } else {
             visp::image_set_alpha(image.view, mask);
             resultImage = image.data;
