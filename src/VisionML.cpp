@@ -43,7 +43,7 @@ struct Paths {
 void initPaths()
 {
     QString user = KoResourcePaths::getAppDataLocation();
-    paths.plugin = user + "/pykrita/ai_tools/";
+    paths.plugin = user + "/pykrita/vision_tools/";
     paths.lib = paths.plugin + "lib/";
     paths.models = paths.plugin + "models/";
 
