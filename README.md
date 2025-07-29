@@ -2,7 +2,7 @@
 
 [Installation](#installation) | [Release Download](https://github.com/Acly/krita-ai-tools/releases) | [Building](#building)
 
-Plugin for painting application Krita which adds various tools and filters based on machine learning:
+Plugin for Krita which adds various tools and filters based on machine learning:
 * Selection tools to mask objects in your image
 * Background removal filter
 * Alternative "Smart Patch" for filling/smoothing small areas
@@ -33,7 +33,7 @@ contained entirely in the box.
 Filter which extracts colors belonging to foreground objects in a layer.
 You can find it at Filters › Other › Background Removal...
 
-![background-removal]()
+<img width="836" height="666" alt="background-removal" src="https://github.com/user-attachments/assets/a8513ce7-0280-4496-91b4-0c7d4fc38518" />
 
 ## Installation
 
@@ -45,18 +45,18 @@ Currently **Windows** and **Linux** are supported.
 
 ### Plugin installation
 
-Since version 2.0 the plugin can be installed as a Python extension.
+Since version 2.0, the plugin can be installed as a Python extension.
 In Krita, go to Tools › Scripts › Import Python Plugin from File...
 and select the `.zip` file you [downloaded](https://github.com/Acly/krita-ai-tools/releases).
 
-![plugin-installation]()
+<img width="647" height="203" alt="installation" src="https://github.com/user-attachments/assets/b2115370-65d3-4463-9086-6ae90de6c6ad" />
 
 Accept and restart Krita. The plugin should now be active, and the tools appear
 in the tool bar.
 
 <details>
-<summary>Krita Python Plugin manager</summary>
-![krita-plugin-manager]()
+<summary>Show Krita Python Plugin manager</summary>
+<img src="https://github.com/user-attachments/assets/a479a164-4f0a-44b3-9ed3-9459893d7a58" />
 </details>
 
 > [!WARNING]
@@ -77,8 +77,7 @@ Model files have the `.gguf` file extension.
 
 You can find the location where to place models with the "Folder" button in the Background Removal Filter dialog.
 
-![model-location]()
-
+<img width="486" height="236" alt="background-removal-models" src="https://github.com/user-attachments/assets/eb93aca4-6bc6-42d5-99f0-38722f1690eb" />
 
 ## Building
 
