@@ -1,7 +1,11 @@
-# Krita Segmentation Tools
+# Krita Vision Tools
 
-Plugin which adds selection tools to mask objects in your image with a single
-click, or by drawing a bounding box.
+[Installation](#installation) | [Release Download](https://github.com/Acly/krita-ai-tools/releases) | [Building](#building)
+
+Plugin for painting application Krita which adds various tools and filters based on machine learning:
+* Selection tools to mask objects in your image
+* Background removal filter
+* Alternative "Smart Patch" for filling/smoothing small areas
 
 <h2><img src="media/tool_segmentation_point.png"> Select Segment from Point</h2>
 
@@ -24,88 +28,65 @@ contained entirely in the box.
 
 ![precise-mode](https://github.com/user-attachments/assets/f48e9e4e-a009-4275-b6d3-03cf1359cc08)
 
+## Background Removal
+
+Filter which extracts colors belonging to foreground objects in a layer.
+You can find it at Filters › Other › Background Removal...
+
+![background-removal]()
+
 ## Installation
 
-The current version of the plugin is built for [Krita 5.2.9](https://krita.org/en/download/krita-desktop/).
+The current version of the plugin is built for [Krita 5.2.11](https://krita.org/en/download/krita-desktop/).
 Using it with other versions may lead to crashes.
 
 You can download the latest version of the plugin from the [releases page](https://github.com/Acly/krita-ai-tools/releases).
+Currently **Windows** and **Linux** are supported.
 
-### Windows
+### Plugin installation
 
-Download the plugin and unpack the ZIP archive into your Krita installation
-folder. Then run Krita.
+Since version 2.0 the plugin can be installed as a Python extension.
+In Krita, go to Tools › Scripts › Import Python Plugin from File...
+and select the `.zip` file you [downloaded](https://github.com/Acly/krita-ai-tools/releases).
 
-Hints:
-* The default installation folder is `C:\Program Files\Krita (x64)`
-* Copy/extract the contents of the ZIP directly, don't make a separate folder
+![plugin-installation]()
 
-### Linux
+Accept and restart Krita. The plugin should now be active, and the tools appear
+in the tool bar.
 
-You can use [this script](scripts/install-krita-with-segmentation.sh) to
-download and patch Krita with the plugin. It also creates a shortcut to run it.
+<details>
+<summary>Krita Python Plugin manager</summary>
+![krita-plugin-manager]()
+</details>
 
-To do it manually, get the Krita AppImage from the official source and extract
-it. This should result in a folder `squashfs-root`. Download the plugin `tar.gz`
-and extract it into that folder. Then run Krita. See the commands below for some
-environment variables that are needed to run outside the image.
-
-```sh
-./krita-5.2.9-x86_64.appimage --appimage-extract
-tar -xf krita_segmentation_plugin-linux-x64-1.1.0.tar.gz -C squashfs-root/
-APPDIR=/squashfs-root APPIMAGE=1 ./squashfs-root/AppRun
-```
-
-#### Arch Linux
-Arch users can use the `PKGBUILD` on [the AUR](https://aur.archlinux.org/packages/krita-ai-tools), or with `yay` or `paru`:
-
-```sh
-yay -S krita-ai-tools
-# or
-paru -S krita-ai-tools
-```
-
-#### GPU support
-
-Disclaimer: untested, and maybe not worth the hassle.
-
-To use the GPU backend on Linux you need:
-* An NVIDIA GPU for CUDA support
-* [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-downloads) installed
-* [cuDNN 9.x](https://developer.nvidia.com/cudnn) installed
-* CUDA Toolkit and cuDNN libraries must be in `LD_LIBRARY_PATH`
+> [!WARNING]
+> If you have an older version (before 2.0) of the plugin installed, please remove it first.
+> The easiest way is re-installing the latest version of Krita (you will keep your settings).
 
 ### Alternative Models
 
-For your own experiments only, not officially supported.
+The Plugin comes with a default ML model for each task. There are alternative
+models which can yield higher precision and better results, but usually at the
+cost of running slower and higher memory requirements.
 
-#### Precise mode
+Model files have the `.gguf` file extension.
 
-[List of alternative model downloads](https://github.com/ZhengPeng7/BiRefNet/releases/tag/v1)
+#### Background Removal
 
-To use a different model, find the model folder and replace one or more of the
-models there (_recommended to make a backup!_) 
-* Models are located in `share/krita/ai_models/segmentation`.
-* Models must be `.onnx` files.
+[Models Download](https://huggingface.co/Acly/BiRefNet-GGUF/tree/main)
 
-Files to add or replace:
-* `birefnet_cpu.onnx` - preferred when using CPU backend
-* `birefnet_gpu.onnx` - preferred when using GPU backend
-* `birefnet_hr_cpu.onnx` - preferred when using high resolutions (~2K)
-* `birefnet_hr_gpu.onnx` - preferred when using high resolutions (~2K)
+You can find the location where to place models with the "Folder" button in the Background Removal Filter dialog.
 
-If a sepcific model doesn't exist, the other ones are used as fallback. So you
-only really need one of them.
-
-> [!TIP]
-> On older GPUs it might make sense to delete the `birefnet_gpu.onnx` file for better performance.
+![model-location]()
 
 
 ## Building
 
-The plugin has to be built as part of Krita, see [Building Krita from Source](https://docs.krita.org/en/untranslatable_pages/building_krita.html#).
+To build the plugin, it has to be part of the Krita source tree and build alongside.
+Refer to [Building Krita from Source](https://docs.krita.org/en/untranslatable_pages/building_krita.html#) for setting up the environment.
 
-After GIT checkout, clone this repository into the plugins folder:
+After GIT checkout of the Krita sources, go to the root of the Krita repository,
+and clone this repository into the plugins folder:
 ```sh
 cd krita/plugins
 git clone https://github.com/Acly/krita-ai-tools.git
@@ -122,6 +103,7 @@ plugin will be built alongside.
 
 ## Technology
 
+* Inference implementation: [vision.cpp](https://github.com/Acly/vision.cpp)
 * Object detection: [Segment Anything Model](https://segment-anything.com/), [MobileSAM](https://github.com/ChaoningZhang/MobileSAM)
 * Dichotomous segmentation: [BiRefNet](https://github.com/ZhengPeng7/BiRefNet)
-* Inference implementation: [dlimgedit](https://github.com/Acly/dlimgedit)
+* Inpainting: [MI-GAN](https://github.com/Picsart-AI-Research/MI-GAN)
