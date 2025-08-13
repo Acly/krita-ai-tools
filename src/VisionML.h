@@ -5,7 +5,7 @@
 #include "KoGroupButton.h"
 #include <kconfiggroup.h>
 
-#include <visp/vision.hpp>
+#include <visp/vision.h>
 
 #include <QComboBox>
 #include <QFileSystemWatcher>
