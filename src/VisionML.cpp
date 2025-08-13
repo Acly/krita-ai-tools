@@ -197,7 +197,6 @@ visp::image_data VisionModels::removeBackground(visp::image_view const &image)
 {
     QMutexLocker lock(&m_mutex);
     if (!m_birefnet.weights) {
-        unloadModels();
         QByteArray path = modelPath(VisionMLTask::background_removal);
         m_birefnet = visp::birefnet_load_model(path.data(), m_backend);
     }
@@ -210,7 +209,6 @@ visp::image_data VisionModels::inpaint(visp::image_view const &image, visp::imag
 {
     QMutexLocker lock(&m_mutex);
     if (!m_migan.weights) {
-        unloadModels();
         QByteArray path = modelPath(VisionMLTask::inpainting);
         m_migan = visp::migan_load_model(path.data(), m_backend);
     }
