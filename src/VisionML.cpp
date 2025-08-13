@@ -79,7 +79,7 @@ QString findModelPath(VisionMLTask task)
     }
 }
 
-char const* toString(VisionMLTask task)
+char const *toString(VisionMLTask task)
 {
     switch (task) {
     case VisionMLTask::segmentation:
@@ -486,7 +486,12 @@ void VisionMLModelSelect::updateModel(VisionMLTask task, QString const &name)
 
 void VisionMLModelSelect::openModelsFolder()
 {
-    QDesktopServices::openUrl(QUrl::fromLocalFile(findModelPath(m_task)));
+    QString folder = findModelPath(m_task);
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(folder))) {
+        QMessageBox::warning(nullptr,
+                             i18nc("@title:window", "Krita - Vision ML Tools Plugin"),
+                             i18n("Failed to open folder: ") + folder);
+    }
 }
 
 //
