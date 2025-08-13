@@ -189,6 +189,7 @@ void InpaintTool::activate(const QSet<KoShape *> &shapes)
 
 void InpaintTool::deactivate()
 {
+    m_d->vision->unload(VisionMLTask::inpainting);
     KisToolPaint::deactivate();
 }
 

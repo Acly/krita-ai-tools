@@ -32,19 +32,19 @@ message(STATUS "[VisionML Plugin] Downloading for models/MobileSAM-F16.gguf")
 file(DOWNLOAD
   "https://huggingface.co/Acly/MobileSAM-GGUF/resolve/main/MobileSAM-F16.gguf"
   ${CMAKE_CURRENT_LIST_DIR}/vision.cpp/models/sam/MobileSAM-F16.gguf
-  EXPECTED_HASH "SHA256=1e392f58a0e518b7e1e9e5a43403ff0c6d001aeefa6f4e4d2bdf60f7bbe6e4f2"
+  EXPECTED_HASH "SHA256=b546366475e3ad744bb2eaf7634df88e9aaf25f6622797d2de300f5a530831f7"
 )
 message(STATUS "[VisionML Plugin] Downloading for models/BiRefNet-lite-F16.gguf")
 file(DOWNLOAD
   "https://huggingface.co/Acly/BiRefNet-GGUF/resolve/main/BiRefNet-lite-F16.gguf"
   ${CMAKE_CURRENT_LIST_DIR}/vision.cpp/models/birefnet/BiRefNet-lite-F16.gguf
-  EXPECTED_HASH "SHA256=f038843ea7c44a859491df96c7b36815143f7de77b13cbfc0dae5f6eae863fb5"
+  EXPECTED_HASH "SHA256=7b5397a2c98d66677f8f74317774bbeac49dbb321b8a3dc744af913db71d4fa5"
 )
 message(STATUS "[VisionML Plugin] Downloading for models/MIGAN-512-places2-F16.gguf")
 file(DOWNLOAD
   "https://huggingface.co/Acly/MIGAN-GGUF/resolve/main/MIGAN-512-places2-F16.gguf"
   ${CMAKE_CURRENT_LIST_DIR}/vision.cpp/models/migan/MIGAN-512-places2-F16.gguf
-  EXPECTED_HASH "SHA256=c9f241e96fb5a791f9494fc7d4c2dd793297ae95f05b8423f547d19bea465b81"
+  EXPECTED_HASH "SHA256=3e47592bf716d0dc306f8dc02d4476cfcdaf2c055fa3c3c8e0ced4db775eb64b"
 )
 
 # Installation

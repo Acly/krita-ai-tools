@@ -265,6 +265,7 @@ void SegmentationToolHelper::deactivate()
 {
     m_referencePaintDevice = nullptr;
     m_referenceNodeList = nullptr;
+    m_shared->unload(VisionMLTask::segmentation);
 }
 
 void SegmentationToolHelper::addOptions(KisSelectionOptions *selectionWidget, bool showMode)

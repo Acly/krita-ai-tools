@@ -93,6 +93,13 @@ char const *toString(VisionMLTask task)
     }
 }
 
+void unloadFromGPU(visp::compute_graph &graph, visp::backend_type devType)
+{
+    if (devType == visp::backend_type::gpu) {
+        graph = {};
+    }
+}
+
 } // namespace
 
 QSharedPointer<VisionModels> VisionModels::create()
@@ -144,15 +151,16 @@ void VisionModels::configureModel(VisionMLTask task, QString const &defaultName)
 QString VisionModels::initialize(visp::backend_type backendType)
 {
     QMutexLocker lock(&m_mutex);
+    m_sam = {};
+    m_birefnet = {};
+    m_migan = {};
     try {
         m_backend = visp::backend_init(backendType);
     } catch (const std::exception &e) {
         return QString(e.what());
     }
     m_backendType = backendType;
-    m_sam = {};
-    m_birefnet = {};
-    m_migan = {};
+
     m_config.writeEntry("backend", backendType == visp::backend_type::gpu ? "gpu" : "cpu");
     return QString();
 }
@@ -193,7 +201,9 @@ visp::image_data VisionModels::removeBackground(visp::image_view const &image)
         QByteArray path = modelPath(VisionMLTask::background_removal);
         m_birefnet = visp::birefnet_load_model(path.data(), m_backend);
     }
-    return visp::birefnet_compute(m_birefnet, image);
+    auto result = visp::birefnet_compute(m_birefnet, image);
+    unloadFromGPU(m_birefnet.graph, m_backendType);
+    return result;
 }
 
 visp::image_data VisionModels::inpaint(visp::image_view const &image, visp::image_view const &mask)
@@ -205,6 +215,29 @@ visp::image_data VisionModels::inpaint(visp::image_view const &image, visp::imag
         m_migan = visp::migan_load_model(path.data(), m_backend);
     }
     return visp::migan_compute(m_migan, image, mask);
+}
+
+void VisionModels::unload(VisionMLTask task)
+{
+    // Models and working memory are not that big.
+    // Keep them in RAM for CPU inference to avoid loading models again from disk.
+    // Unload from GPU memory because VRAM is more precious.
+    if (m_backendType == visp::backend_type::gpu) {
+        QMutexLocker lock(&m_mutex);
+        switch (task) {
+        case VisionMLTask::segmentation:
+            m_sam = {};
+            break;
+        case VisionMLTask::inpainting:
+            m_migan = {};
+            break;
+        case VisionMLTask::background_removal:
+            m_birefnet = {};
+            break;
+        default:
+            break;
+        }
+    }
 }
 
 QByteArray VisionModels::modelPath(VisionMLTask task) const

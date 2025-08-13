@@ -47,6 +47,8 @@ public:
 
     visp::image_data inpaint(visp::image_view const &image, visp::image_view const &mask);
 
+    void unload(VisionMLTask);
+
     visp::backend_type backend() const;
     bool setBackend(visp::backend_type backend);
     QString backendDeviceDescription() const;
